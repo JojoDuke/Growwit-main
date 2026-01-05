@@ -1,19 +1,23 @@
 import { useCampaigns } from "@/contexts/CampaignContext";
-import { router } from "expo-router";
+import { Campaign } from "@/types";
+import { router, Href } from "expo-router";
 import { Clock, CheckCircle2, AlertCircle, Copy, Target, Plus } from "lucide-react-native";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   StyleSheet,
   Text,
   View,
   ScrollView,
   TouchableOpacity,
+  Modal,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { format, isToday, parseISO } from "date-fns";
 
 export default function HomeScreen() {
-  const { campaigns, actions } = useCampaigns();
+  const { campaigns, actions, addCampaign } = useCampaigns();
+  const [showNewCampaignModal, setShowNewCampaignModal] = useState<boolean>(false);
 
   const todayActions = useMemo(() => {
     return actions.filter((action) => {
@@ -38,19 +42,16 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.header}>
-        <View style={styles.headerSpacer} />
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => router.push("/campaigns")}
-          activeOpacity={0.7}
-        >
-          <Plus size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={() => setShowNewCampaignModal(true)}
+        activeOpacity={0.7}
+      >
+        <Plus size={24} color="#FFFFFF" />
+      </TouchableOpacity>
 
-      <ScrollView 
-        style={styles.scrollView} 
+      <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={todayActions.length === 0 ? styles.scrollViewContent : undefined}
         showsVerticalScrollIndicator={false}
       >
@@ -76,15 +77,13 @@ export default function HomeScreen() {
                 ? "Create a campaign to start generating posts"
                 : "Check back later for scheduled posts"}
             </Text>
-            {activeCampaigns.length === 0 && (
-              <TouchableOpacity
-                style={styles.createButton}
-                onPress={() => router.push("/campaigns")}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.createButtonText}>Create Campaign</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={() => setShowNewCampaignModal(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.createButtonText}>Create Campaign</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -119,8 +118,8 @@ export default function HomeScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Active Campaigns</Text>
-              <TouchableOpacity onPress={() => router.push("/campaigns")}>
-                <Text style={styles.seeAll}>See All</Text>
+              <TouchableOpacity onPress={() => setShowNewCampaignModal(true)}>
+                <Text style={styles.seeAll}>Create New</Text>
               </TouchableOpacity>
             </View>
             {activeCampaigns.slice(0, 3).map((campaign) => (
@@ -144,7 +143,210 @@ export default function HomeScreen() {
           </View>
         )}
       </ScrollView>
+
+      <NewCampaignModal
+        visible={showNewCampaignModal}
+        onClose={() => setShowNewCampaignModal(false)}
+        onSubmit={async (campaign: Campaign) => {
+          await addCampaign(campaign);
+          setShowNewCampaignModal(false);
+          router.push(`/campaign/${campaign.id}` as Href);
+        }}
+      />
     </SafeAreaView>
+  );
+}
+
+function NewCampaignModal({
+  visible,
+  onClose,
+  onSubmit,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onSubmit: (campaign: Campaign) => void;
+}) {
+  const [name, setName] = useState<string>("");
+  const [product, setProduct] = useState<string>("");
+  const [goal, setGoal] = useState<string>("users");
+  const [targetAudience, setTargetAudience] = useState<string>("");
+  const [accountName, setAccountName] = useState<string>("");
+  const [accounts, setAccounts] = useState<string[]>([]);
+  const [postsPerMonth, setPostsPerMonth] = useState<string>("50");
+
+  const isFormValid = name.trim() !== "" &&
+    product.trim() !== "" &&
+    goal !== "" &&
+    postsPerMonth !== "" &&
+    accounts.length > 0;
+
+  const handleSubmit = () => {
+    if (!name || !product || accounts.length === 0) {
+      return;
+    }
+
+    const campaign: Campaign = {
+      id: `campaign-${Date.now()}`,
+      name,
+      product,
+      goal: goal as Campaign["goal"],
+      targetAudience: targetAudience || undefined,
+      accounts: accounts.map((acc, idx) => ({
+        id: `account-${idx}`,
+        name: acc,
+        karma: 0,
+        accountAge: 0,
+      })),
+      postsPerMonth: parseInt(postsPerMonth) || 50,
+      commentsPerDay: { min: 3, max: 7 },
+      createdAt: new Date().toISOString(),
+      status: "draft",
+    };
+
+    onSubmit(campaign);
+    resetForm();
+  };
+
+  const resetForm = () => {
+    setName("");
+    setProduct("");
+    setGoal("users");
+    setTargetAudience("");
+    setAccountName("");
+    setAccounts([]);
+    setPostsPerMonth("50");
+  };
+
+  const addAccount = () => {
+    if (accountName.trim()) {
+      setAccounts([...accounts, accountName.trim()]);
+      setAccountName("");
+    }
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+      <SafeAreaView style={styles.modalContainer} edges={["top", "bottom"]}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={onClose}>
+            <Text style={styles.modalCancel}>Cancel</Text>
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>New Campaign</Text>
+          <View style={{ width: 60 }} />
+        </View>
+
+        <ScrollView style={styles.modalContent}>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Campaign Name</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="e.g., Launch Product X"
+              placeholderTextColor="#94A3B8"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Product/Service</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={product}
+              onChangeText={setProduct}
+              placeholder="What are you promoting?"
+              placeholderTextColor="#94A3B8"
+              multiline
+              numberOfLines={3}
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Goal</Text>
+            <View style={styles.goalButtons}>
+              {["users", "clients", "feedback", "awareness"].map((g) => (
+                <TouchableOpacity
+                  key={g}
+                  style={[styles.goalButton, goal === g && styles.goalButtonActive]}
+                  onPress={() => setGoal(g)}
+                >
+                  <Text style={[styles.goalButtonText, goal === g && styles.goalButtonTextActive]}>
+                    {g}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Target Audience (Optional)</Text>
+            <TextInput
+              style={styles.input}
+              value={targetAudience}
+              onChangeText={setTargetAudience}
+              placeholder="e.g., College students, Entrepreneurs"
+              placeholderTextColor="#94A3B8"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Reddit Accounts</Text>
+            <View style={styles.accountInputRow}>
+              <TextInput
+                style={[styles.input, styles.accountInput]}
+                value={accountName}
+                onChangeText={setAccountName}
+                placeholder="u/accountname"
+                placeholderTextColor="#94A3B8"
+                onSubmitEditing={addAccount}
+                returnKeyType="done"
+              />
+              <TouchableOpacity style={styles.addAccountButton} onPress={addAccount}>
+                <Plus size={20} color="#FF6B35" />
+              </TouchableOpacity>
+            </View>
+            {accounts.length > 0 && (
+              <View style={styles.accountsList}>
+                {accounts.map((acc, idx) => (
+                  <View key={idx} style={styles.accountChip}>
+                    <Text style={styles.accountChipText}>{acc}</Text>
+                    <TouchableOpacity onPress={() => setAccounts(accounts.filter((_, i) => i !== idx))}>
+                      <Text style={styles.accountChipRemove}>×</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Posts Per Month</Text>
+            <TextInput
+              style={styles.input}
+              value={postsPerMonth}
+              onChangeText={setPostsPerMonth}
+              placeholder="50"
+              keyboardType="number-pad"
+              placeholderTextColor="#94A3B8"
+            />
+          </View>
+          <View style={{ height: 40 }} />
+        </ScrollView>
+
+        <View style={styles.modalFooter}>
+          <TouchableOpacity
+            style={[
+              styles.modalSubmitButton,
+              !isFormValid && styles.modalSubmitButtonDisabled
+            ]}
+            onPress={handleSubmit}
+            disabled={!isFormValid}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.modalSubmitButtonText}>Create Campaign</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
   );
 }
 
@@ -225,27 +427,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
-  },
-  headerSpacer: {
-    flex: 1,
-  },
   addButton: {
+    position: "absolute",
+    top: 16,
+    right: 20,
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: "#FF6B35",
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 10,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   scrollView: {
     flex: 1,
@@ -466,5 +663,151 @@ const styles = StyleSheet.create({
   campaignProduct: {
     fontSize: 12,
     color: "#64748B",
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1E293B",
+  },
+  modalCancel: {
+    fontSize: 16,
+    color: "#64748B",
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  formGroup: {
+    marginBottom: 24,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1E293B",
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#1E293B",
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  goalButtons: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  goalButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  goalButtonActive: {
+    backgroundColor: "#FFF1ED",
+    borderColor: "#FF6B35",
+  },
+  goalButtonText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#64748B",
+    textTransform: "capitalize",
+  },
+  goalButtonTextActive: {
+    color: "#FF6B35",
+  },
+  accountInputRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  accountInput: {
+    flex: 1,
+  },
+  addAccountButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#FFF1ED",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  accountsList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+  },
+  accountChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  accountChipText: {
+    fontSize: 14,
+    color: "#1E293B",
+  },
+  accountChipRemove: {
+    fontSize: 20,
+    color: "#64748B",
+    lineHeight: 20,
+  },
+  modalFooter: {
+    padding: 20,
+    backgroundColor: "#FFFFFF",
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+  },
+  modalSubmitButton: {
+    backgroundColor: "#FF6B35",
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#FF6B35",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  modalSubmitButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  modalSubmitButtonDisabled: {
+    backgroundColor: "#CBD5E1",
+    shadowOpacity: 0,
+    elevation: 0,
   },
 });
