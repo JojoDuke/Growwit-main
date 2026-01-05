@@ -4,24 +4,17 @@ export default function RootLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: {
-          backgroundColor: '#fff',
-        },
-        headerTintColor: '#000',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
+        headerShown: false,
       }}
     >
-      <Stack.Screen 
-        name="index" 
-        options={{ title: 'Growwit' }} 
-      />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen 
         name="campaign/create" 
-        options={{ title: 'Create Campaign' }} 
+        options={{ 
+          presentation: 'modal',
+          title: 'Create Campaign' 
+        }} 
       />
     </Stack>
   );
 }
-
