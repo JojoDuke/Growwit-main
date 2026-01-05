@@ -11,9 +11,12 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
+  Animated,
+  PanResponder,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { format, isToday, parseISO } from "date-fns";
+import { useRef, useEffect } from "react";
 
 export default function HomeScreen() {
   const { campaigns, actions, addCampaign } = useCampaigns();
@@ -168,15 +171,21 @@ function NewCampaignModal({
 }) {
   const [name, setName] = useState<string>("");
   const [product, setProduct] = useState<string>("");
-  const [goal, setGoal] = useState<string>("users");
+  const [problem, setProblem] = useState<string>("");
+  const [goal, setGoal] = useState<string>("discussion");
   const [targetAudience, setTargetAudience] = useState<string>("");
+  const [accountAge, setAccountAge] = useState<string>("");
+  const [accountKarma, setAccountKarma] = useState<string>("");
   const [accountName, setAccountName] = useState<string>("");
   const [accounts, setAccounts] = useState<string[]>([]);
   const [postsPerMonth, setPostsPerMonth] = useState<string>("50");
 
   const isFormValid = name.trim() !== "" &&
     product.trim() !== "" &&
+    problem.trim() !== "" &&
     goal !== "" &&
+    accountAge !== "" &&
+    accountKarma !== "" &&
     postsPerMonth !== "" &&
     accounts.length > 0;
 
@@ -189,13 +198,14 @@ function NewCampaignModal({
       id: `campaign-${Date.now()}`,
       name,
       product,
+      problem,
       goal: goal as Campaign["goal"],
       targetAudience: targetAudience || undefined,
       accounts: accounts.map((acc, idx) => ({
         id: `account-${idx}`,
         name: acc,
-        karma: 0,
-        accountAge: 0,
+        karma: parseInt(accountKarma) || 0,
+        accountAge: parseInt(accountAge) || 0,
       })),
       postsPerMonth: parseInt(postsPerMonth) || 50,
       commentsPerDay: { min: 3, max: 7 },
@@ -210,8 +220,11 @@ function NewCampaignModal({
   const resetForm = () => {
     setName("");
     setProduct("");
-    setGoal("users");
+    setProblem("");
+    setGoal("discussion");
     setTargetAudience("");
+    setAccountAge("");
+    setAccountKarma("");
     setAccountName("");
     setAccounts([]);
     setPostsPerMonth("50");
@@ -224,128 +237,222 @@ function NewCampaignModal({
     }
   };
 
+  const pan = useRef(new Animated.ValueXY()).current;
+
+  useEffect(() => {
+    if (visible) {
+      pan.setValue({ x: 0, y: 0 });
+    }
+  }, [visible]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 5;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          pan.setValue({ x: 0, y: gestureState.dy });
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 120 || gestureState.vy > 0.5) {
+          onClose();
+        } else {
+          Animated.spring(pan, {
+            toValue: { x: 0, y: 0 },
+            useNativeDriver: false,
+            tension: 50,
+            friction: 10,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <SafeAreaView style={styles.modalContainer} edges={["top", "bottom"]}>
-        <View style={styles.modalHeader}>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.modalCancel}>Cancel</Text>
-          </TouchableOpacity>
-          <Text style={styles.modalTitle}>New Campaign</Text>
-          <View style={{ width: 60 }} />
-        </View>
-
-        <ScrollView style={styles.modalContent}>
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Campaign Name</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="e.g., Launch Product X"
-              placeholderTextColor="#94A3B8"
-            />
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <Animated.View
+          style={[
+            styles.modalContainer,
+            { transform: [{ translateY: pan.y }] }
+          ]}
+        >
+          <View
+            style={styles.modalHandleContainer}
+            {...panResponder.panHandlers}
+          >
+            <View style={styles.modalHandle} />
+          </View>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={onClose}>
+              <Text style={styles.modalCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>New Campaign</Text>
+            <View style={{ width: 60 }} />
           </View>
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Product/Service</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={product}
-              onChangeText={setProduct}
-              placeholder="What are you promoting?"
-              placeholderTextColor="#94A3B8"
-              multiline
-              numberOfLines={3}
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Goal</Text>
-            <View style={styles.goalButtons}>
-              {["users", "clients", "feedback", "awareness"].map((g) => (
-                <TouchableOpacity
-                  key={g}
-                  style={[styles.goalButton, goal === g && styles.goalButtonActive]}
-                  onPress={() => setGoal(g)}
-                >
-                  <Text style={[styles.goalButtonText, goal === g && styles.goalButtonTextActive]}>
-                    {g}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Target Audience (Optional)</Text>
-            <TextInput
-              style={styles.input}
-              value={targetAudience}
-              onChangeText={setTargetAudience}
-              placeholder="e.g., College students, Entrepreneurs"
-              placeholderTextColor="#94A3B8"
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Reddit Accounts</Text>
-            <View style={styles.accountInputRow}>
+          <ScrollView style={styles.modalContent}>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Campaign Name</Text>
               <TextInput
-                style={[styles.input, styles.accountInput]}
-                value={accountName}
-                onChangeText={setAccountName}
-                placeholder="u/accountname"
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="e.g., Launch Product X"
                 placeholderTextColor="#94A3B8"
-                onSubmitEditing={addAccount}
-                returnKeyType="done"
               />
-              <TouchableOpacity style={styles.addAccountButton} onPress={addAccount}>
-                <Plus size={20} color="#FF6B35" />
-              </TouchableOpacity>
             </View>
-            {accounts.length > 0 && (
-              <View style={styles.accountsList}>
-                {accounts.map((acc, idx) => (
-                  <View key={idx} style={styles.accountChip}>
-                    <Text style={styles.accountChipText}>{acc}</Text>
-                    <TouchableOpacity onPress={() => setAccounts(accounts.filter((_, i) => i !== idx))}>
-                      <Text style={styles.accountChipRemove}>×</Text>
-                    </TouchableOpacity>
-                  </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Product/Service</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={product}
+                onChangeText={setProduct}
+                placeholder="What are you promoting?"
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Primary Problem Addressed</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={problem}
+                onChangeText={setProblem}
+                placeholder="e.g., Founders struggle to find their first users"
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={2}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Select Campaign Goal</Text>
+              <View style={styles.goalButtons}>
+                {[
+                  { id: "discussion", label: "Spark Discussion" },
+                  { id: "dms", label: "Inbound DMs" },
+                  { id: "profile", label: "Profile Discovery" },
+                ].map((g) => (
+                  <TouchableOpacity
+                    key={g.id}
+                    style={[styles.goalButton, goal === g.id && styles.goalButtonActive]}
+                    onPress={() => setGoal(g.id)}
+                  >
+                    <Text style={[styles.goalButtonText, goal === g.id && styles.goalButtonTextActive]}>
+                      {g.label}
+                    </Text>
+                  </TouchableOpacity>
                 ))}
               </View>
-            )}
-          </View>
+            </View>
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Posts Per Month</Text>
-            <TextInput
-              style={styles.input}
-              value={postsPerMonth}
-              onChangeText={setPostsPerMonth}
-              placeholder="50"
-              keyboardType="number-pad"
-              placeholderTextColor="#94A3B8"
-            />
-          </View>
-          <View style={{ height: 40 }} />
-        </ScrollView>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Target Audience</Text>
+              <TextInput
+                style={styles.input}
+                value={targetAudience}
+                onChangeText={setTargetAudience}
+                placeholder="e.g., Solo founders, SaaS developers"
+                placeholderTextColor="#94A3B8"
+              />
+            </View>
 
-        <View style={styles.modalFooter}>
-          <TouchableOpacity
-            style={[
-              styles.modalSubmitButton,
-              !isFormValid && styles.modalSubmitButtonDisabled
-            ]}
-            onPress={handleSubmit}
-            disabled={!isFormValid}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.modalSubmitButtonText}>Create Campaign</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+            <View style={{ flexDirection: "row", gap: 16, marginBottom: 24 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Account Age (Days)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={accountAge}
+                  onChangeText={setAccountAge}
+                  placeholder="30"
+                  keyboardType="number-pad"
+                  placeholderTextColor="#94A3B8"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Average Karma</Text>
+                <TextInput
+                  style={styles.input}
+                  value={accountKarma}
+                  onChangeText={setAccountKarma}
+                  placeholder="500"
+                  keyboardType="number-pad"
+                  placeholderTextColor="#94A3B8"
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Reddit Accounts</Text>
+              <View style={styles.accountInputRow}>
+                <TextInput
+                  style={[styles.input, styles.accountInput]}
+                  value={accountName}
+                  onChangeText={setAccountName}
+                  placeholder="u/accountname"
+                  placeholderTextColor="#94A3B8"
+                  onSubmitEditing={addAccount}
+                  returnKeyType="done"
+                />
+                <TouchableOpacity style={styles.addAccountButton} onPress={addAccount}>
+                  <Plus size={20} color="#FF6B35" />
+                </TouchableOpacity>
+              </View>
+              {accounts.length > 0 && (
+                <View style={styles.accountsList}>
+                  {accounts.map((acc, idx) => (
+                    <View key={idx} style={styles.accountChip}>
+                      <Text style={styles.accountChipText}>{acc}</Text>
+                      <TouchableOpacity onPress={() => setAccounts(accounts.filter((_, i) => i !== idx))}>
+                        <Text style={styles.accountChipRemove}>×</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Posts Per Month</Text>
+              <TextInput
+                style={styles.input}
+                value={postsPerMonth}
+                onChangeText={setPostsPerMonth}
+                placeholder="50"
+                keyboardType="number-pad"
+                placeholderTextColor="#94A3B8"
+              />
+            </View>
+            <View style={{ height: 40 }} />
+          </ScrollView>
+
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={[
+                styles.modalSubmitButton,
+                !isFormValid && styles.modalSubmitButtonDisabled
+              ]}
+              onPress={handleSubmit}
+              disabled={!isFormValid}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalSubmitButtonText}>Create Campaign</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </View>
     </Modal>
   );
 }
@@ -664,16 +771,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#64748B",
   },
-  modalContainer: {
+  modalOverlay: {
     flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContainer: {
+    height: "90%",
     backgroundColor: "#F8FAFC",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: "hidden",
+  },
+  modalHandleContainer: {
+    alignItems: "center",
+    paddingVertical: 12,
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  modalHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#E2E8F0",
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingBottom: 16,
     backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
     borderBottomColor: "#E2E8F0",

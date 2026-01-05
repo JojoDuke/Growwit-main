@@ -9,7 +9,8 @@ export interface Campaign {
   id: string;
   name: string;
   product: string;
-  goal: 'users' | 'clients' | 'feedback' | 'awareness' | 'dms' | 'profile' | 'traffic';
+  problem: string;
+  goal: 'discussion' | 'dms' | 'profile' | 'traffic' | 'calls';
   targetAudience?: string;
   accounts: Account[];
   postsPerMonth: number;
@@ -24,7 +25,9 @@ export interface Action {
   type: 'post' | 'comment';
   status: 'pending' | 'completed' | 'skipped';
   subreddit: string;
+  title?: string;
   content?: string;
+  cta?: string;
   scheduledFor?: string;
   completedAt?: string;
 }
