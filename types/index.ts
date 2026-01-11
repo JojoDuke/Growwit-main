@@ -9,7 +9,6 @@ export interface Campaign {
   id: string;
   name: string;
   product: string;
-  problem: string;
   goal: 'discussion' | 'dms' | 'profile' | 'traffic' | 'calls';
   targetAudience?: string;
   accounts: Account[];
@@ -22,6 +21,7 @@ export interface Campaign {
 export interface Action {
   id: string;
   campaignId: string;
+  accountId: string;
   type: 'post' | 'comment';
   status: 'pending' | 'completed' | 'skipped';
   subreddit: string;

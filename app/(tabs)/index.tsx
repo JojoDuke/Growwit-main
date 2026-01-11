@@ -1,7 +1,7 @@
 import { useCampaigns } from "@/contexts/CampaignContext";
 import { Campaign } from "@/types";
 import { router, Href } from "expo-router";
-import { Clock, CheckCircle2, AlertCircle, Copy, Target, Plus } from "lucide-react-native";
+
 import React, { useMemo, useState } from "react";
 import {
   StyleSheet,
@@ -13,13 +13,17 @@ import {
   TextInput,
   Animated,
   PanResponder,
+  Alert,
+  Linking,
 } from "react-native";
+import * as Clipboard from 'expo-clipboard';
+import { Clock, CheckCircle2, AlertCircle, Copy, Target, Plus, ExternalLink, ShieldCheck } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { format, isToday, parseISO } from "date-fns";
 import { useRef, useEffect } from "react";
 
 export default function HomeScreen() {
-  const { campaigns, actions, addCampaign } = useCampaigns();
+  const { campaigns, actions, addCampaign, completeAction } = useCampaigns();
   const [showNewCampaignModal, setShowNewCampaignModal] = useState<boolean>(false);
 
   const todayActions = useMemo(() => {
@@ -60,14 +64,21 @@ export default function HomeScreen() {
       >
         {todayActions.length > 0 ? (
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
+            <View style={[styles.sectionHeader, styles.topSectionHeader]}>
               <Text style={styles.sectionTitle}>Ready to Post</Text>
+              <View style={{ flex: 1 }} />
               <Text style={styles.actionCount}>{todayActions.length}</Text>
+              <View style={{ width: 64 }} />
             </View>
             {todayActions.map((action) => {
               const campaign = campaigns.find((c) => c.id === action.campaignId);
               return (
-                <ActionCard key={action.id} action={action} campaign={campaign} />
+                <ActionCard
+                  key={action.id}
+                  action={action}
+                  campaign={campaign}
+                  onComplete={completeAction}
+                />
               );
             })}
           </View>
@@ -153,7 +164,7 @@ export default function HomeScreen() {
         onSubmit={async (campaign: Campaign) => {
           await addCampaign(campaign);
           setShowNewCampaignModal(false);
-          router.push(`/campaign/${campaign.id}` as Href);
+          // Stay on home to see the new actions
         }}
       />
     </SafeAreaView>
@@ -171,7 +182,6 @@ function NewCampaignModal({
 }) {
   const [name, setName] = useState<string>("");
   const [product, setProduct] = useState<string>("");
-  const [problem, setProblem] = useState<string>("");
   const [goal, setGoal] = useState<string>("discussion");
   const [targetAudience, setTargetAudience] = useState<string>("");
   const [accountAge, setAccountAge] = useState<string>("");
@@ -182,7 +192,6 @@ function NewCampaignModal({
 
   const isFormValid = name.trim() !== "" &&
     product.trim() !== "" &&
-    problem.trim() !== "" &&
     goal !== "" &&
     accountAge !== "" &&
     accountKarma !== "" &&
@@ -198,7 +207,6 @@ function NewCampaignModal({
       id: `campaign-${Date.now()}`,
       name,
       product,
-      problem,
       goal: goal as Campaign["goal"],
       targetAudience: targetAudience || undefined,
       accounts: accounts.map((acc, idx) => ({
@@ -220,7 +228,6 @@ function NewCampaignModal({
   const resetForm = () => {
     setName("");
     setProduct("");
-    setProblem("");
     setGoal("discussion");
     setTargetAudience("");
     setAccountAge("");
@@ -321,19 +328,6 @@ function NewCampaignModal({
                 placeholderTextColor="#94A3B8"
                 multiline
                 numberOfLines={3}
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Primary Problem Addressed</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={problem}
-                onChangeText={setProblem}
-                placeholder="e.g., Founders struggle to find their first users"
-                placeholderTextColor="#94A3B8"
-                multiline
-                numberOfLines={2}
               />
             </View>
 
@@ -460,18 +454,26 @@ function NewCampaignModal({
 function ActionCard({
   action,
   campaign,
+  onComplete,
 }: {
   action: any;
   campaign: any;
+  onComplete: (id: string) => void;
 }) {
-  const handleCopy = () => {
-    // Copy action content to clipboard
-    // This will be implemented when content generation is ready
+  const handleCopy = async (text: string, type: string) => {
+    await Clipboard.setStringAsync(text);
+    Alert.alert("Copied", `${type} copied to clipboard!`);
+  };
+
+  const handleOpenReddit = () => {
+    const url = `https://www.reddit.com/r/${action.subreddit}/submit`;
+    Linking.openURL(url).catch((err) =>
+      Alert.alert("Error", "Could not open Reddit submission page")
+    );
   };
 
   const handleComplete = () => {
-    // Mark action as completed
-    // This will be implemented when action management is ready
+    onComplete(action.id);
   };
 
   return (
@@ -488,7 +490,13 @@ function ActionCard({
           <Text style={styles.actionType}>
             {action.type === "post" ? "Post" : "Comment"} in r/{action.subreddit}
           </Text>
-          <Text style={styles.actionCampaign}>{campaign?.name || "Unknown Campaign"}</Text>
+          <View style={styles.statusRow}>
+            <Text style={styles.actionCampaign}>{campaign?.name || "Unknown Campaign"}</Text>
+            <View style={styles.safetyBadge}>
+              <ShieldCheck size={12} color="#10B981" />
+              <Text style={styles.safetyText}>Safe to post</Text>
+            </View>
+          </View>
         </View>
         {action.scheduledFor && (
           <Text style={styles.actionTime}>
@@ -497,25 +505,51 @@ function ActionCard({
         )}
       </View>
 
-      {action.content && (
-        <View style={styles.actionContent}>
-          <Text style={styles.actionContentText} numberOfLines={3}>
-            {action.content}
-          </Text>
-        </View>
-      )}
+      <View style={styles.cardDivider} />
+
+      <View style={styles.contentSections}>
+        {action.title && (
+          <View style={styles.contentSection}>
+            <View style={styles.sectionLabelRow}>
+              <Text style={styles.sectionLabel}>REDDIT TITLE</Text>
+              <TouchableOpacity onPress={() => handleCopy(action.title, "Title")}>
+                <Copy size={14} color="#FF6B35" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.snippetContainer}>
+              <Text style={styles.snippetText}>{action.title}</Text>
+            </View>
+          </View>
+        )}
+
+        {action.content && (
+          <View style={styles.contentSection}>
+            <View style={styles.sectionLabelRow}>
+              <Text style={styles.sectionLabel}>POST BODY</Text>
+              <TouchableOpacity onPress={() => handleCopy(action.content, "Body")}>
+                <Copy size={14} color="#FF6B35" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.snippetContainer}>
+              <Text style={styles.snippetText}>{action.content}</Text>
+              {action.cta && (
+                <Text style={styles.ctaText}>{action.cta}</Text>
+              )}
+            </View>
+          </View>
+        )}
+      </View>
 
       <View style={styles.actionButtons}>
-        {action.content && (
-          <TouchableOpacity
-            style={styles.copyButton}
-            onPress={handleCopy}
-            activeOpacity={0.7}
-          >
-            <Copy size={16} color="#FF6B35" />
-            <Text style={styles.copyButtonText}>Copy</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={styles.openRedditButton}
+          onPress={handleOpenReddit}
+          activeOpacity={0.7}
+        >
+          <ExternalLink size={16} color="#FF6B35" />
+          <Text style={styles.openRedditText}>Open r/{action.subreddit}</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.completeButton}
           onPress={handleComplete}
@@ -565,15 +599,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 20,
+  },
+  topSectionHeader: {
+    height: 44,
+    marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#64748B",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 12,
   },
   actionCount: {
     fontSize: 14,
@@ -620,19 +657,23 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   actionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
   },
   actionIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#FFF1ED",
     alignItems: "center",
     justifyContent: "center",
@@ -642,61 +683,111 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   actionType: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
     color: "#1E293B",
-    marginBottom: 2,
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+    gap: 8,
   },
   actionCampaign: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#64748B",
+  },
+  safetyBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 4,
+  },
+  safetyText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#10B981",
+    textTransform: "uppercase",
   },
   actionTime: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "#64748B",
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#94A3B8",
   },
-  actionContent: {
+  cardDivider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
+    marginVertical: 12,
+  },
+  contentSections: {
+    gap: 16,
+    marginBottom: 16,
+  },
+  contentSection: {
+    gap: 8,
+  },
+  sectionLabelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#94A3B8",
+    letterSpacing: 1,
+  },
+  snippetContainer: {
     backgroundColor: "#F8FAFC",
     borderRadius: 8,
     padding: 12,
-    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
   },
-  actionContentText: {
+  snippetText: {
     fontSize: 14,
-    color: "#475569",
+    color: "#334155",
     lineHeight: 20,
+  },
+  ctaText: {
+    fontSize: 14,
+    color: "#FF6B35",
+    fontWeight: "600",
+    marginTop: 8,
   },
   actionButtons: {
     flexDirection: "row",
-    gap: 8,
+    gap: 12,
   },
-  copyButton: {
-    flex: 1,
+  openRedditButton: {
+    flex: 1.2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 12,
-    backgroundColor: "#FFF1ED",
-    borderRadius: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#FF6B35",
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    gap: 8,
   },
-  copyButtonText: {
+  openRedditText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#FF6B35",
+    color: "#1E293B",
   },
   completeButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 12,
-    backgroundColor: "#FF6B35",
-    borderRadius: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#10B981",
+    gap: 8,
   },
   completeButtonText: {
     fontSize: 14,
