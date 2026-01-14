@@ -38,6 +38,7 @@ import { Buffer as Buffer$1 } from 'buffer';
 import { tools } from './tools.mjs';
 
 const strategist = new Agent({
+  id: "strategist",
   name: "Strategist",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o-mini"
