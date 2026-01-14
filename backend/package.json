@@ -12,6 +12,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.9",
     "@mastra/core": "^1.0.0-beta.21",
     "@mastra/libsql": "^1.0.0-beta.11",
     "@mastra/loggers": "^1.0.0-beta.4",

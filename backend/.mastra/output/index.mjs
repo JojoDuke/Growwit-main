@@ -3,6 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability } from '@mastra/observability';
+import { Agent, isSupportedLanguageModel, tryGenerateWithJsonFallback, tryStreamWithJsonFallback, MessageList } from '@mastra/core/agent';
 import { readdir, readFile, mkdtemp, rm, writeFile, mkdir, copyFile, stat } from 'fs/promises';
 import * as https from 'https';
 import { join, resolve as resolve$2, dirname, extname, basename, isAbsolute, relative } from 'path';
@@ -21,7 +22,6 @@ import { listScoresResponseSchema } from '@mastra/core/evals';
 import { listTracesResponseSchema, tracesFilterSchema, paginationArgsSchema, tracesOrderBySchema, getTraceResponseSchema, getTraceArgsSchema, scoreTracesResponseSchema, scoreTracesRequestSchema, spanIdsSchema, dateRangeSchema } from '@mastra/core/storage';
 import { MastraA2AError } from '@mastra/core/a2a';
 import { TransformStream as TransformStream$1, ReadableStream as ReadableStream$1 } from 'stream/web';
-import { Agent, isSupportedLanguageModel, tryGenerateWithJsonFallback, tryStreamWithJsonFallback, MessageList } from '@mastra/core/agent';
 import * as z42 from 'zod/v4';
 import { z as z$2 } from 'zod/v4';
 import { ZodFirstPartyTypeKind as ZodFirstPartyTypeKind$1 } from 'zod/v3';
@@ -37,7 +37,16 @@ import { MastraServerBase } from '@mastra/core/server';
 import { Buffer as Buffer$1 } from 'buffer';
 import { tools } from './tools.mjs';
 
+const strategist = new Agent({
+  name: "Strategist",
+  instructions: "You are a helpful assistant",
+  model: "openai/gpt-4o-mini"
+});
+
 const mastra = new Mastra({
+  agents: {
+    strategist
+  },
   storage: new LibSQLStore({
     id: "mastra-storage",
     // stores observability, scores, ... into memory storage, if it needs to persist, change to file:../mastra.db
