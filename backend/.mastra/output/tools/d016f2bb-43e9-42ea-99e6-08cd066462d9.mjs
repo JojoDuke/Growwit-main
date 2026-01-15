@@ -1,12 +1,6 @@
-import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
-import { Observability } from '@mastra/observability';
-import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-"use strict";
 const searchTool = createTool({
   id: "search-tool",
   description: "Search the web for real-time information using Tavily",
@@ -61,47 +55,4 @@ const searchTool = createTool({
   }
 });
 
-"use strict";
-const strategist = new Agent({
-  id: "strategist",
-  name: "Strategist",
-  instructions: `
-  You are a search bot. Your ONLY job is to use the search-tool. 
-  
-  When the user sends you ANY message, you must:
-  1. Use the search-tool to search for their message
-  2. Return the search results
-  
-  You are NOT allowed to answer questions from memory.
-  You are NOT allowed to provide suggestions.
-  You MUST use the search-tool for EVERY request.
-  
-  DO NOT respond without using the search-tool first.
-  `,
-  model: "openai/gpt-4o",
-  tools: { searchTool }
-});
-
-"use strict";
-const mastra = new Mastra({
-  agents: {
-    strategist
-  },
-  storage: new LibSQLStore({
-    id: "mastra-storage",
-    // stores observability, scores, ... into memory storage, if it needs to persist, change to file:../mastra.db
-    url: ":memory:"
-  }),
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info"
-  }),
-  observability: new Observability({
-    // Enables DefaultExporter and CloudExporter for tracing
-    default: {
-      enabled: true
-    }
-  })
-});
-
-export { mastra };
+export { searchTool };
