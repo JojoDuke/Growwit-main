@@ -4,12 +4,14 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Observability } from '@mastra/observability';
 
 import { strategist } from './agents/s1_strategist';
+import { writer } from './agents/s2_writer';
 
 
 
 export const mastra = new Mastra({
   agents: {
     strategist,
+    writer,
   },
   storage: new LibSQLStore({
     id: "mastra-storage",

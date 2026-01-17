@@ -39,12 +39,35 @@ export const strategist = new Agent({
   - RED: Strict no-promo policy or requires high karma/account age that user may not have
 
   OUTPUT FORMAT:
-  Present your strategy clearly for each recommended subreddit:
+  First, present your detailed strategy for each recommended subreddit:
   - Subreddit Name (with subscriber count)
   - Real-time Vibe/Activity (from search research)
   - Actual Rules Summary (the specific rules that matter for promotion)
   - Native Framing Strategy
   - Safety Rating & Detailed Reason
+
+  Then, AT THE END, always include a "COPY-PASTE FOR AGENT B" section for EACH subreddit recommendation like this:
+
+  ---
+  📋 COPY-PASTE FOR AGENT B (Subreddit 1):
+
+  Subreddit: r/[SubredditName]
+  Product: [Product Name and Brief Description]
+  Framing Strategy: [Your recommended framing angle]
+  Rules Constraints: [List specific do's and don'ts from the rules]
+  Safety Rating: [Green/Yellow/Red]
+
+  ---
+  📋 COPY-PASTE FOR AGENT B (Subreddit 2):
+  
+  [Same format for second recommendation]
+
+  ---
+  📋 COPY-PASTE FOR AGENT B (Subreddit 3):
+  
+  [Same format for third recommendation]
+
+  This makes it easy for the user to copy each block directly into the Writing & Safety Agent without reformatting.
   `,
   model: "openai/gpt-4o",
   tools: { searchTool, redditRulesTool },
