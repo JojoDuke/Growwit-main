@@ -25,12 +25,9 @@ export const redditRulesTool = createTool({
             links: z.boolean(),
             videos: z.boolean(),
         }),
-        error: z.string().optional(),
+        fetchError: z.string().optional(),
     }),
-    execute: async (args: any) => {
-        // Handle variations in Mastra Beta versions for input access
-        const subreddit = args.context?.subreddit || args.subreddit || args?.triggerArgs?.subreddit;
-
+    execute: async ({ subreddit }) => {
         if (!subreddit) {
             throw new Error("No subreddit name provided to tool");
         }
@@ -59,7 +56,7 @@ export const redditRulesTool = createTool({
                         links: false,
                         videos: false,
                     },
-                    error: `Subreddit not found or private (HTTP ${aboutResponse.status})`,
+                    fetchError: `Subreddit not found or private (HTTP ${aboutResponse.status})`,
                 };
             }
 
@@ -88,16 +85,17 @@ export const redditRulesTool = createTool({
                 description: data.public_description || data.description || "",
                 subscribers: data.subscribers || 0,
                 rules: rules.map((rule: any) => ({
-                    short_name: rule.short_name,
-                    description: rule.description || rule.violation_reason || "",
-                    violation_reason: rule.violation_reason,
+                    short_name: rule.short_name || "Rule",
+                    description: rule.description || rule.violation_reason || "No description provided",
+                    violation_reason: rule.violation_reason || undefined,
                 })),
                 allowedPostTypes: {
-                    text: !data.restrict_posting,
+                    text: !!data.restrict_posting === false,
                     images: data.allow_images !== false,
                     links: data.allow_links !== false,
                     videos: data.allow_videos !== false,
                 },
+                fetchError: undefined,
             };
 
         } catch (error: any) {
@@ -113,7 +111,7 @@ export const redditRulesTool = createTool({
                     links: false,
                     videos: false,
                 },
-                error: `Failed to fetch data: ${error.message}`,
+                fetchError: `Failed to fetch data: ${error.message}`,
             };
         }
     },

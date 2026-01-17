@@ -7,6 +7,7 @@ import { Agent, isSupportedLanguageModel, tryGenerateWithJsonFallback, tryStream
 import { searchTool } from './tools/d016f2bb-43e9-42ea-99e6-08cd066462d9.mjs';
 import { createTool, isVercelTool, Tool } from '@mastra/core/tools';
 import z$1, { z, ZodObject, ZodFirstPartyTypeKind } from 'zod';
+import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { readdir, readFile, mkdtemp, rm, writeFile, mkdir, copyFile, stat } from 'fs/promises';
 import * as https from 'https';
 import { join, resolve as resolve$2, dirname, extname, basename, isAbsolute, relative } from 'path';
@@ -32,7 +33,6 @@ import { createRequire } from 'module';
 import util, { promisify } from 'util';
 import { ModelRouterLanguageModel, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { tmpdir } from 'os';
-import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
 import { Buffer as Buffer$1 } from 'buffer';
@@ -62,10 +62,9 @@ const redditRulesTool = createTool({
       links: z.boolean(),
       videos: z.boolean()
     }),
-    error: z.string().optional()
+    fetchError: z.string().optional()
   }),
-  execute: async (args) => {
-    const subreddit = args.context?.subreddit || args.subreddit || args?.triggerArgs?.subreddit;
+  execute: async ({ subreddit }) => {
     if (!subreddit) {
       throw new Error("No subreddit name provided to tool");
     }
@@ -91,7 +90,7 @@ const redditRulesTool = createTool({
             links: false,
             videos: false
           },
-          error: `Subreddit not found or private (HTTP ${aboutResponse.status})`
+          fetchError: `Subreddit not found or private (HTTP ${aboutResponse.status})`
         };
       }
       const aboutData = await aboutResponse.json();
@@ -115,16 +114,17 @@ const redditRulesTool = createTool({
         description: data.public_description || data.description || "",
         subscribers: data.subscribers || 0,
         rules: rules.map((rule) => ({
-          short_name: rule.short_name,
-          description: rule.description || rule.violation_reason || "",
-          violation_reason: rule.violation_reason
+          short_name: rule.short_name || "Rule",
+          description: rule.description || rule.violation_reason || "No description provided",
+          violation_reason: rule.violation_reason || void 0
         })),
         allowedPostTypes: {
-          text: !data.restrict_posting,
+          text: !!data.restrict_posting === false,
           images: data.allow_images !== false,
           links: data.allow_links !== false,
           videos: data.allow_videos !== false
-        }
+        },
+        fetchError: void 0
       };
     } catch (error) {
       return {
@@ -139,7 +139,7 @@ const redditRulesTool = createTool({
           links: false,
           videos: false
         },
-        error: `Failed to fetch data: ${error.message}`
+        fetchError: `Failed to fetch data: ${error.message}`
       };
     }
   }
@@ -220,72 +220,398 @@ const writer = new Agent({
   name: "Writing & Safety Agent",
   instructions: `
   You are the 'Growwit Writer & Safety Agent' (Agent B), a specialist in authentic Reddit copywriting.
-  Your mission is to transform a strategic brief into a native-sounding Reddit post that provides value first, promotes second.
+  Your mission is to transform a strategic brief into a native-sounding Reddit post that sounds like a REAL person, not an AI.
 
-  CORE WRITING PHILOSOPHY:
-  - Write like a real human sharing their experience, not a marketer pushing a product
-  - Use natural, conversational language (avoid em dashes, bullet points in conversation, excessive formatting)
-  - Support both first-person narrative ("I built this...") AND storytelling/reporting style ("This tool does X...")
-  - Questions are more powerful than statements
-  - Vulnerability and authenticity beat polish
+  CRITICAL: You are writing in the voice of a specific user. Below are examples of their ACTUAL Reddit posts. 
+  Study the tone, vocabulary, sentence structure, and directness. Match this voice EXACTLY.
+
+  --- VOICE REFERENCE (Real posts by the user) ---
+
+  Post 1:
+  Title: Anyone get fully diagnosed without a colonoscopy?
+  Body: Asking to see if there was anyone that got a definitive diagnosis without getting a colonoscopy first or at all, like you went through a combination of imaging, blood test or stool test and your doctor was able to say that you have UC or you tried a certain medication and it confirmed it for you?
+
+  Post 2:
+  Title: I'm building an app that helps you market and promote your product/service on Reddit without getting your ass banned
+  Body: As the title says. Reddit is a gold mine for marketing and the transaction of value. The views and opportunities you get aren't bound by the algorithm or needing an audience nor do you have to do any video creation or content to get good numbers as well.
+
+  I've seen people here grow their products from just posting consistently and organically. I want to build an app that'll help people with this and do it in a community friendly way so that it's not seen as spam and not get their asses banned for no reason.
+
+  Building the android version rn.
+
+  Post 3 (excerpt):
+  Title: 5 hours of gurgling and still no bowel movement yet
+  Body: I have chronic constipation. From the doctors instructions I had my last meal at 4pm, started 1st prep at 6pm...
+  Update 1: 8 hours in, still no bowel movement, I don't even feel the gurgles and stomach movements any more, wow. Starting my 2nd prep anyway to see how it goes.
+  LATEST UPDATE: So a literal miracle happened, literally an hour to the procedure, I had a single big watery bowel movement... and lady's and gentlemen I got the colonoscopy, and it was cleannnn \u{1F62D}
+
+  --- END VOICE REFERENCE ---
+
+  VOICE CHARACTERISTICS (What to match):
+  - Direct openers: "As the title says" / Get straight to it
+  - Casual, real language: "rn", "ass banned", natural abbreviations
+  - Keep natural typos/informality: "havnt", "lady's" (instead of "ladies")
+  - Use lowercase for emphasis: "cleannnn" with emotion
+  - End with statements, not asks: "Building the android version rn." NOT "Would love your thoughts!"
+  - No hedging: "I'm building" not "I've been working on" or "I got curious about"
+  - Real-time feel: Updates, current tense, like you're documenting as you go
+
+  ABSOLUTELY FORBIDDEN (Auto-flag these as AI tells):
+  - "folks like us" / "folks" in general
+  - "genuinely curious"
+  - "Would love to hear your thoughts/experiences!"
+  - "falling by the wayside" or any archaic phrases
+  - "game-changer" or marketing buzzwords
+  - "work-life balance" (corporate speak)
+  - "amidst" (no one talks like this)
+  - Multiple exclamation marks or fake enthusiasm
+  - Em dashes
+  - Opening with "So," or "Hey there!"
 
   INPUT EXPECTATIONS:
-  The user will provide you with:
-  1. Subreddit name (where this will be posted)
+  The user will provide:
+  1. Subreddit name
   2. Product/service description
-  3. Framing strategy (the angle to take, from Agent A)
-  4. Rules constraints (specific do's and don'ts from the subreddit)
-  5. Safety rating (Green/Yellow/Red)
+  3. Framing strategy
+  4. Rules constraints
+  5. Safety rating
 
   WRITING WORKFLOW:
-    1. INTERNALIZE THE RULES: Review the constraints carefully. If it says "no links," write with ZERO links. If it requires a specific tag, include it.
-    2. CHOOSE YOUR VOICE: Based on the framing strategy, decide whether to use:
-       - First-person narrative: "I spent 3 months building..."
-       - Storytelling/reporting: "There's this new approach to..."
-    3. CRAFT THE TITLE: Under 300 characters, naturally intriguing, NO clickbait or marketing speak
-    4. WRITE THE BODY: 
-       - Start with context or a problem statement
-       - Share the journey or solution organically
-       - If mentioning the product, frame it as "a thing I made" not "our product"
-       - End with a genuine question or invitation for feedback (never "Check it out!" or "Sign up now!")
-    5. SAFETY SCAN: Before finalizing, check for:
-       - Forbidden CTAs ("Try it", "Sign up", "Visit our site")
-       - Marketing buzzwords ("Revolutionary", "Game-changing", "Perfect")
-       - Links in violation of rules
-       - Overly promotional tone
-
-  FORBIDDEN PATTERNS (Auto-flag these):
-  - Em dashes (\u2014)
-  - Multiple exclamation marks
-  - Emojis (unless the subreddit culture uses them heavily)
-  - "Hey there!" or "Hey Reddit!" openings
-  - "Our team", "We launched", "Our product" (use "I" or "This tool")
+    1. INTERNALIZE THE RULES: If it says "no links," write with ZERO links. Follow every constraint.
+    2. MATCH THE VOICE: Write like the reference posts above. Be direct, casual, real.
+    3. TITLE: Short, direct, no clickbait. Match the user's title style (see examples).
+    4. BODY:
+       - Start with the problem or context (no fluff intro)
+       - Share the build/journey in first person
+       - Use "I built" or "I'm building" NOT "I ended up creating" or "I got curious"
+       - End with a fact or simple question, NOT "would love to hear thoughts!"
+    5. SAFETY SCAN: Flag any corporate language, AI tells, or rule violations
 
   OUTPUT FORMAT:
-  Always structure your response as:
   
   **Title:**
-  [Your proposed post title]
+  [Your proposed title - under 300 chars, matches user's direct style]
   
   **Body:**
-  [Your post content]
+  [Post content in the user's voice]
   
   **Suggested Flair:** (if applicable)
   [Flair recommendation]
   
   **Safety Check:**
   - Passed: [Yes/No]
-  - Warnings: [List any concerns or potential rule violations]
+  - AI Tells Found: [List any phrases that sound fake/corporate]
+  - Rule Violations: [List any constraint violations]
+  - Warnings: [Any other concerns]
   
-  If the Safety Rating from Agent A was "Red" or "Yellow", be EXTRA cautious and add a disclaimer in your Safety Check.
+  If you catch yourself using forbidden phrases, STOP and rewrite in the reference voice.
   `,
   model: "openai/gpt-4o"
 });
 
+const redditPostAnalyzer = createTool({
+  id: "reddit-post-analyzer",
+  description: "Analyze the top 100 successful posts from a subreddit to find optimal posting windows",
+  inputSchema: z.object({
+    subreddit: z.string().describe("The subreddit name (without r/ prefix)")
+  }),
+  outputSchema: z.object({
+    subreddit: z.string(),
+    analysisPeriod: z.string(),
+    peakHour: z.number().describe("The hour (0-23 UTC) when most top posts were created"),
+    peakDay: z.string().describe("The day of the week when most top posts were created"),
+    bestWindows: z.array(z.object({
+      day: z.string(),
+      hourUTC: z.number(),
+      frequency: z.number().describe("Number of top posts found in this window")
+    })),
+    engagementVelocity: z.string().describe("Comparison of recent vs historical success in this sub")
+  }),
+  execute: async (args) => {
+    const subreddit = args.context?.subreddit || args.subreddit || args?.triggerArgs?.subreddit;
+    if (!subreddit) {
+      throw new Error("No subreddit name provided");
+    }
+    try {
+      const response = await fetch(
+        `https://www.reddit.com/r/${subreddit}/top/.json?t=month&limit=100`,
+        {
+          headers: {
+            "User-Agent": "Growwit-Data-Analyst/1.0"
+          }
+        }
+      );
+      if (!response.ok) {
+        throw new Error(`Reddit API error: ${response.status}`);
+      }
+      const json = await response.json();
+      const posts = json.data.children;
+      if (!posts || posts.length === 0) {
+        throw new Error("No posts found for analysis");
+      }
+      const matrix = {
+        "Sunday": new Array(24).fill(0),
+        "Monday": new Array(24).fill(0),
+        "Tuesday": new Array(24).fill(0),
+        "Wednesday": new Array(24).fill(0),
+        "Thursday": new Array(24).fill(0),
+        "Friday": new Array(24).fill(0),
+        "Saturday": new Array(24).fill(0)
+      };
+      const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      posts.forEach((p) => {
+        const date = new Date(p.data.created_utc * 1e3);
+        const day = days[date.getUTCDay()];
+        const hour = date.getUTCHours();
+        matrix[day][hour]++;
+      });
+      let bestWindows = [];
+      let maxFreq = 0;
+      let peakDay = "Monday";
+      let peakHour = 9;
+      Object.entries(matrix).forEach(([day, hours]) => {
+        hours.forEach((freq, hour) => {
+          if (freq > 0) {
+            bestWindows.push({ day, hourUTC: hour, frequency: freq });
+          }
+          if (freq > maxFreq) {
+            maxFreq = freq;
+            peakDay = day;
+            peakHour = hour;
+          }
+        });
+      });
+      bestWindows.sort((a, b) => b.frequency - a.frequency);
+      return {
+        subreddit,
+        analysisPeriod: "Past 30 Days",
+        peakHour,
+        peakDay,
+        bestWindows: bestWindows.slice(0, 5),
+        // Top 5 windows
+        engagementVelocity: posts.length >= 100 ? "High" : "Moderate"
+      };
+    } catch (error) {
+      throw new Error(`Failed to analyze subreddit: ${error.message}`);
+    }
+  }
+});
+
+const cadenceAgent = new Agent({
+  id: "cadence-agent",
+  name: "Cadence & Learning Agent",
+  instructions: `
+  You are the 'Growwit Cadence & Learning Agent' (Agent C). 
+  Your primary goal is to determine the absolute best timing for a campaign to maximize visibility while minimizing "bot-like" behavior.
+
+  CORE RESPONSIBILITIES:
+  1. DATA-DRIVEN TIMING: For each target subreddit provided by Agent A, you MUST use the 'reddit-post-analyzer' tool. 
+     - This tool looks at the top 100 successful posts of the last month in that specific sub.
+     - Use the 'peakHour' and 'peakDay' from the tool's actual findings, not generic internet advice.
+  
+  2. CAMPAIGN SPACING: Create a schedule that staggers posts.
+     - Never post to closely related subreddits within the same 6-hour window.
+     - Maximum 2-3 posts per day across the entire account to avoid being flagged as a spam bot.
+  
+  3. CONTEXTUAL OVERRIDES: Use the 'search-tool' ONLY to find human-imposed rules like "Self-promo Saturday" or "Feedback Fridays" that might restrict the technical peak windows discovered by the data analyzer.
+
+  OUTPUT FORMAT:
+  Present a clear "Campaign Schedule" that includes:
+  - Subreddit Name
+  - Recommended Day & Time (Specify UTC and common user timezones like EST)
+  - Success Indicator: (e.g., "Historically, 15% of top posts in this sub were posted during this window")
+  - Risk Level: (e.g., "Low - Matches community peak engagement")
+
+  STRATEGIC ADVICE:
+  Always conclude with a tip on how to handle the first 60 minutes after posting (engagement velocity), as this is crucial for the "Hot" algorithm.
+  `,
+  model: "openai/gpt-4o",
+  tools: { searchTool, redditPostAnalyzer }
+});
+
+const campaignGenerator = new Agent({
+  id: "campaign-generator",
+  name: "Campaign Generator",
+  instructions: `
+  You are the "Growwit Campaign Generator", an orchestrator that creates complete Reddit marketing campaigns.
+  
+  YOUR MISSION:
+  When a user describes their product or service, you coordinate with three specialized agents to create a full campaign:
+  1. The Strategist (Agent A): Finds target subreddits and creates strategy.
+  2. The Writer (Agent B): Writes authentic Reddit posts based on the strategy.
+  3. The Cadence & Learning Agent (Agent C): Determines the best timing and schedule for the posts.
+  
+  HOW TO INTERACT:
+  - The user will describe their product in natural language.
+  - Extract: Product Name, Description, and Goal.
+  - If any information is missing, ASK for it before proceeding.
+  - Once you have all info, delegate to your sub-agents in sequence.
+  
+  WORKFLOW:
+  1. CALL THE STRATEGIST: Get the target subreddits and framing strategy.
+  2. CALL THE WRITER: For each recommended subreddit, get a draft post in the user's voice.
+  3. CALL THE CADENCE AGENT: Provide the list of subreddits to Agent C to get the optimal posting schedule.
+  4. COMPILE & PRESENT: Combine all results into a single, cohesive campaign document.
+  
+  FORMATTING THE OUTPUT:
+  Present everything in a clean, readable format:
+  
+  === CAMPAIGN STRATEGY ===
+  [Full strategy from Agent A]
+  
+  === READY-TO-POST DRAFTS ===
+  [Posts from Agent B]
+  
+  === POSTING SCHEDULE & CADENCE ===
+  [Schedule recommendations from Agent C]
+  
+  ---
+  
+  IMPORTANT:
+  - Use your sub-agents for all research, writing, and timing - don't make things up.
+  - Ensure the output flows logically from "Where to post" to "What to post" to "When to post".
+  `,
+  model: "openai/gpt-4o",
+  agents: { strategist, writer, cadenceAgent }
+});
+
+const getStrategyStep = createStep({
+  id: "get-strategy",
+  inputSchema: z.object({
+    productName: z.string(),
+    productDescription: z.string(),
+    userGoal: z.string()
+  }),
+  outputSchema: z.object({
+    strategyText: z.string(),
+    recommendations: z.array(
+      z.object({
+        subreddit: z.string(),
+        product: z.string(),
+        framingStrategy: z.string(),
+        rulesConstraints: z.string(),
+        safetyRating: z.string()
+      })
+    )
+  }),
+  execute: async ({ inputData }) => {
+    const { productName, productDescription, userGoal } = inputData;
+    const prompt = `Product: ${productName}
+Description: ${productDescription}
+Goal: ${userGoal}`;
+    const result = await strategist.generate(prompt);
+    const strategyText = result.text || "";
+    const copyPasteBlocks = strategyText.split("\u{1F4CB} COPY-PASTE FOR AGENT B");
+    const recommendations = [];
+    for (let i = 1; i < copyPasteBlocks.length; i++) {
+      const block = copyPasteBlocks[i];
+      const subredditMatch = block.match(/Subreddit:\s*(r\/\S+)/);
+      const productMatch = block.match(/Product:\s*([^\n]+)/);
+      const framingMatch = block.match(/Framing Strategy:\s*([^\n]+)/);
+      const rulesMatch = block.match(/Rules Constraints:\s*([^\n]+)/);
+      const safetyMatch = block.match(/Safety Rating:\s*(\w+)/);
+      if (subredditMatch && productMatch && framingMatch && rulesMatch && safetyMatch) {
+        recommendations.push({
+          subreddit: subredditMatch[1].trim(),
+          product: productMatch[1].trim(),
+          framingStrategy: framingMatch[1].trim(),
+          rulesConstraints: rulesMatch[1].trim(),
+          safetyRating: safetyMatch[1].trim()
+        });
+      }
+    }
+    return {
+      strategyText,
+      recommendations
+    };
+  }
+});
+const generatePostsStep = createStep({
+  id: "generate-posts",
+  inputSchema: z.object({
+    strategyText: z.string(),
+    recommendations: z.array(
+      z.object({
+        subreddit: z.string(),
+        product: z.string(),
+        framingStrategy: z.string(),
+        rulesConstraints: z.string(),
+        safetyRating: z.string()
+      })
+    )
+  }),
+  outputSchema: z.object({
+    strategyText: z.string(),
+    posts: z.array(
+      z.object({
+        subreddit: z.string(),
+        title: z.string(),
+        body: z.string(),
+        flair: z.string().optional(),
+        safetyCheck: z.string()
+      })
+    )
+  }),
+  execute: async ({ inputData }) => {
+    const { strategyText, recommendations } = inputData;
+    const posts = [];
+    for (const rec of recommendations) {
+      const writerPrompt = `Subreddit: ${rec.subreddit}
+Product: ${rec.product}
+Framing Strategy: ${rec.framingStrategy}
+Rules Constraints: ${rec.rulesConstraints}
+Safety Rating: ${rec.safetyRating}`;
+      const result = await writer.generate(writerPrompt);
+      const postText = result.text || "";
+      const titleMatch = postText.match(/\*\*Title:\*\*\s*\n([^\n]+)/);
+      const bodyMatch = postText.match(/\*\*Body:\*\*\s*\n([\s\S]*?)\n\*\*Suggested Flair:/);
+      const flairMatch = postText.match(/\*\*Suggested Flair:\*\*\s*\n([^\n]*)/);
+      const safetyMatch = postText.match(/\*\*Safety Check:\*\*\s*\n([\s\S]*?)(?:\n\n|$)/);
+      posts.push({
+        subreddit: rec.subreddit,
+        title: titleMatch ? titleMatch[1].trim() : "",
+        body: bodyMatch ? bodyMatch[1].trim() : postText,
+        flair: flairMatch ? flairMatch[1].trim() : void 0,
+        safetyCheck: safetyMatch ? safetyMatch[1].trim() : "Unknown"
+      });
+    }
+    return {
+      strategyText,
+      posts
+    };
+  }
+});
+const redditCampaignWorkflow = createWorkflow({
+  id: "reddit-campaign-workflow",
+  inputSchema: z.object({
+    productName: z.string().describe("Name of the product or service"),
+    productDescription: z.string().describe("Brief description of what it does"),
+    userGoal: z.string().describe("What you want to achieve (e.g., 'Get 5 alpha testers')")
+  }),
+  outputSchema: z.object({
+    strategyText: z.string(),
+    posts: z.array(
+      z.object({
+        subreddit: z.string(),
+        title: z.string(),
+        body: z.string(),
+        flair: z.string().optional(),
+        safetyCheck: z.string()
+      })
+    )
+  })
+}).then(getStrategyStep).then(generatePostsStep);
+redditCampaignWorkflow.commit();
+
 const mastra = new Mastra({
   agents: {
     strategist,
-    writer
+    writer,
+    campaignGenerator,
+    cadenceAgent
+  },
+  workflows: {
+    redditCampaignWorkflow
   },
   storage: new LibSQLStore({
     id: "mastra-storage",
