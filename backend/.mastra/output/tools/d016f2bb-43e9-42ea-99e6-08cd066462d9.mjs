@@ -16,10 +16,8 @@ const searchTool = createTool({
       })
     )
   }),
-  execute: async (args) => {
-    const query = args.context?.query || args.query || args?.triggerArgs?.query;
+  execute: async ({ query }) => {
     if (!query) {
-      console.error("Tool execution failed: No query found in args", args);
       throw new Error("No search query provided to tool");
     }
     const apiKey = process.env.TAVILY_API_KEY;

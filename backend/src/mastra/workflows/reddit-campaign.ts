@@ -2,6 +2,7 @@ import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 import { strategist } from "../agents/s1_strategist";
 import { writer } from "../agents/s2_writer";
+import { cadenceAgent } from "../agents/s3_cadence";
 
 // Step 1: Get strategy from Agent A
 const getStrategyStep = createStep({
@@ -130,6 +131,49 @@ Safety Rating: ${rec.safetyRating}`;
     },
 });
 
+const getCadenceStep = createStep({
+    id: "get-cadence",
+    inputSchema: z.object({
+        strategyText: z.string(),
+        posts: z.array(
+            z.object({
+                subreddit: z.string(),
+                title: z.string(),
+                body: z.string(),
+                flair: z.string().optional(),
+                safetyCheck: z.string(),
+            })
+        ),
+    }),
+    outputSchema: z.object({
+        strategyText: z.string(),
+        posts: z.array(
+            z.object({
+                subreddit: z.string(),
+                title: z.string(),
+                body: z.string(),
+                flair: z.string().optional(),
+                safetyCheck: z.string(),
+            })
+        ),
+        cadenceText: z.string(),
+    }),
+    execute: async ({ inputData }) => {
+        const { strategyText, posts } = inputData;
+
+        const subreddits = posts.map(p => p.subreddit).join(", ");
+        const cadencePrompt = `Please determine the optimal posting schedule and cadence for these subreddits: ${subreddits}. Use your tools to analyze each one. Provide a cohesive campaign schedule.`;
+
+        const result = await cadenceAgent.generate(cadencePrompt);
+
+        return {
+            strategyText,
+            posts,
+            cadenceText: result.text || "",
+        };
+    },
+});
+
 // Create the workflow
 export const redditCampaignWorkflow = createWorkflow({
     id: "reddit-campaign-workflow",
@@ -149,9 +193,11 @@ export const redditCampaignWorkflow = createWorkflow({
                 safetyCheck: z.string(),
             })
         ),
+        cadenceText: z.string(),
     }),
 })
     .then(getStrategyStep)
-    .then(generatePostsStep);
+    .then(generatePostsStep)
+    .then(getCadenceStep);
 
 redditCampaignWorkflow.commit();

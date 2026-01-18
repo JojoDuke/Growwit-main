@@ -2,6 +2,7 @@ import { Agent } from "@mastra/core/agent";
 import { strategist } from "./s1_strategist";
 import { writer } from "./s2_writer";
 import { cadenceAgent } from "./s3_cadence";
+import { MODELS } from "../models";
 
 export const campaignGenerator = new Agent({
     id: "campaign-generator",
@@ -46,6 +47,6 @@ export const campaignGenerator = new Agent({
   - Use your sub-agents for all research, writing, and timing - don't make things up.
   - Ensure the output flows logically from "Where to post" to "What to post" to "When to post".
   `,
-    model: "openai/gpt-4o",
+    model: MODELS.ORCHESTRATOR,
     agents: { strategist, writer, cadenceAgent },
 });

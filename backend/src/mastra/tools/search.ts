@@ -16,12 +16,8 @@ export const searchTool = createTool({
             })
         ),
     }),
-    execute: async (args: any) => {
-        // Handle variations in Mastra Beta versions for input access
-        const query = args.context?.query || args.query || args?.triggerArgs?.query;
-
+    execute: async ({ query }) => {
         if (!query) {
-            console.error("Tool execution failed: No query found in args", args);
             throw new Error("No search query provided to tool");
         }
 

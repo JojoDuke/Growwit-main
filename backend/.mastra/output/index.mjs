@@ -7,6 +7,7 @@ import { Agent, isSupportedLanguageModel, tryGenerateWithJsonFallback, tryStream
 import { searchTool } from './tools/d016f2bb-43e9-42ea-99e6-08cd066462d9.mjs';
 import { createTool, isVercelTool, Tool } from '@mastra/core/tools';
 import z$1, { z, ZodObject, ZodFirstPartyTypeKind } from 'zod';
+import { createOpenAI as createOpenAI$1 } from '@ai-sdk/openai';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { readdir, readFile, mkdtemp, rm, writeFile, mkdir, copyFile, stat } from 'fs/promises';
 import * as https from 'https';
@@ -145,6 +146,21 @@ const redditRulesTool = createTool({
   }
 });
 
+const openrouter = createOpenAI$1({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY
+});
+const MODELS = {
+  // Agent B: The High-Quality Writer
+  WRITER: "openai/gpt-4o",
+  // Orchestrator: The Decisive Project Manager
+  ORCHESTRATOR: openrouter("meta-llama/llama-3.3-70b-instruct"),
+  // Agent A: The Deep Researcher
+  STRATEGIST: openrouter("qwen/qwen-2.5-72b-instruct"),
+  // Agent C: The Data Analyst
+  CADENCE: openrouter("deepseek/deepseek-chat")
+};
+
 const strategist = new Agent({
   id: "strategist",
   name: "Strategist",
@@ -211,7 +227,7 @@ const strategist = new Agent({
 
   This makes it easy for the user to copy each block directly into the Writing & Safety Agent without reformatting.
   `,
-  model: "openai/gpt-4o",
+  model: MODELS.STRATEGIST,
   tools: { searchTool, redditRulesTool }
 });
 
@@ -306,7 +322,7 @@ const writer = new Agent({
   
   If you catch yourself using forbidden phrases, STOP and rewrite in the reference voice.
   `,
-  model: "openai/gpt-4o"
+  model: MODELS.WRITER
 });
 
 const redditPostAnalyzer = createTool({
@@ -327,8 +343,7 @@ const redditPostAnalyzer = createTool({
     })),
     engagementVelocity: z.string().describe("Comparison of recent vs historical success in this sub")
   }),
-  execute: async (args) => {
-    const subreddit = args.context?.subreddit || args.subreddit || args?.triggerArgs?.subreddit;
+  execute: async ({ subreddit }) => {
     if (!subreddit) {
       throw new Error("No subreddit name provided");
     }
@@ -425,7 +440,7 @@ const cadenceAgent = new Agent({
   STRATEGIC ADVICE:
   Always conclude with a tip on how to handle the first 60 minutes after posting (engagement velocity), as this is crucial for the "Hot" algorithm.
   `,
-  model: "openai/gpt-4o",
+  model: MODELS.CADENCE,
   tools: { searchTool, redditPostAnalyzer }
 });
 
@@ -471,7 +486,7 @@ const campaignGenerator = new Agent({
   - Use your sub-agents for all research, writing, and timing - don't make things up.
   - Ensure the output flows logically from "Where to post" to "What to post" to "When to post".
   `,
-  model: "openai/gpt-4o",
+  model: MODELS.ORCHESTRATOR,
   agents: { strategist, writer, cadenceAgent }
 });
 
@@ -581,6 +596,45 @@ Safety Rating: ${rec.safetyRating}`;
     };
   }
 });
+const getCadenceStep = createStep({
+  id: "get-cadence",
+  inputSchema: z.object({
+    strategyText: z.string(),
+    posts: z.array(
+      z.object({
+        subreddit: z.string(),
+        title: z.string(),
+        body: z.string(),
+        flair: z.string().optional(),
+        safetyCheck: z.string()
+      })
+    )
+  }),
+  outputSchema: z.object({
+    strategyText: z.string(),
+    posts: z.array(
+      z.object({
+        subreddit: z.string(),
+        title: z.string(),
+        body: z.string(),
+        flair: z.string().optional(),
+        safetyCheck: z.string()
+      })
+    ),
+    cadenceText: z.string()
+  }),
+  execute: async ({ inputData }) => {
+    const { strategyText, posts } = inputData;
+    const subreddits = posts.map((p) => p.subreddit).join(", ");
+    const cadencePrompt = `Please determine the optimal posting schedule and cadence for these subreddits: ${subreddits}. Use your tools to analyze each one. Provide a cohesive campaign schedule.`;
+    const result = await cadenceAgent.generate(cadencePrompt);
+    return {
+      strategyText,
+      posts,
+      cadenceText: result.text || ""
+    };
+  }
+});
 const redditCampaignWorkflow = createWorkflow({
   id: "reddit-campaign-workflow",
   inputSchema: z.object({
@@ -598,9 +652,10 @@ const redditCampaignWorkflow = createWorkflow({
         flair: z.string().optional(),
         safetyCheck: z.string()
       })
-    )
+    ),
+    cadenceText: z.string()
   })
-}).then(getStrategyStep).then(generatePostsStep);
+}).then(getStrategyStep).then(generatePostsStep).then(getCadenceStep);
 redditCampaignWorkflow.commit();
 
 const mastra = new Mastra({

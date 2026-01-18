@@ -19,9 +19,7 @@ export const redditPostAnalyzer = createTool({
         })),
         engagementVelocity: z.string().describe("Comparison of recent vs historical success in this sub"),
     }),
-    execute: async (args: any) => {
-        const subreddit = args.context?.subreddit || args.subreddit || args?.triggerArgs?.subreddit;
-
+    execute: async ({ subreddit }) => {
         if (!subreddit) {
             throw new Error("No subreddit name provided");
         }
