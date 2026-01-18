@@ -1,6 +1,7 @@
 import { Agent } from "@mastra/core/agent";
 import { searchTool } from "../tools/search";
 import { redditRulesTool } from "../tools/reddit-rules";
+import { MODELS } from "../models";
 
 export const strategist = new Agent({
   id: "strategist",
@@ -69,6 +70,6 @@ export const strategist = new Agent({
 
   This makes it easy for the user to copy each block directly into the Writing & Safety Agent without reformatting.
   `,
-  model: "openai/gpt-4o",
+  model: MODELS.STRATEGIST,
   tools: { searchTool, redditRulesTool },
 });

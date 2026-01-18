@@ -9,6 +9,7 @@ import '@mastra/core/agent';
 import './tools/d016f2bb-43e9-42ea-99e6-08cd066462d9.mjs';
 import '@mastra/core/tools';
 import '@ai-sdk/openai';
+import '@ai-sdk/groq';
 import '@mastra/core/workflows';
 import 'fs/promises';
 import 'https';

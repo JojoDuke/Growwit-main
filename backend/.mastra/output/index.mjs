@@ -7,7 +7,8 @@ import { Agent, isSupportedLanguageModel, tryGenerateWithJsonFallback, tryStream
 import { searchTool } from './tools/d016f2bb-43e9-42ea-99e6-08cd066462d9.mjs';
 import { createTool, isVercelTool, Tool } from '@mastra/core/tools';
 import z$1, { z, ZodObject, ZodFirstPartyTypeKind } from 'zod';
-import { createOpenAI as createOpenAI$1 } from '@ai-sdk/openai';
+import { openai as openai$1 } from '@ai-sdk/openai';
+import { groq } from '@ai-sdk/groq';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { readdir, readFile, mkdtemp, rm, writeFile, mkdir, copyFile, stat } from 'fs/promises';
 import * as https from 'https';
@@ -146,19 +147,15 @@ const redditRulesTool = createTool({
   }
 });
 
-const openrouter = createOpenAI$1({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY
-});
 const MODELS = {
-  // Agent B: The High-Quality Writer
-  WRITER: "openai/gpt-4o",
-  // Orchestrator: The Decisive Project Manager
-  ORCHESTRATOR: openrouter("meta-llama/llama-3.3-70b-instruct"),
-  // Agent A: The Deep Researcher
-  STRATEGIST: openrouter("qwen/qwen-2.5-72b-instruct"),
-  // Agent C: The Data Analyst
-  CADENCE: openrouter("deepseek/deepseek-chat")
+  // Agent B: The Voice Specialist (Premium brain for human-like writing)
+  WRITER: openai$1("gpt-4o"),
+  // Orchestrator: The Project Manager (Ultra-fast routing and planning)
+  ORCHESTRATOR: groq("llama-3.3-70b-versatile"),
+  // Agent A: The Deep Researcher (Reasoning-focused for subreddit scouting)
+  STRATEGIST: groq("deepseek-r1-distill-llama-70b"),
+  // Agent C: The Data Analyst (Logic-focused for engagement peak analysis)
+  CADENCE: groq("qwen-2.5-32b")
 };
 
 const strategist = new Agent({
@@ -431,11 +428,14 @@ const cadenceAgent = new Agent({
   3. CONTEXTUAL OVERRIDES: Use the 'search-tool' ONLY to find human-imposed rules like "Self-promo Saturday" or "Feedback Fridays" that might restrict the technical peak windows discovered by the data analyzer.
 
   OUTPUT FORMAT:
-  Present a clear "Campaign Schedule" that includes:
-  - Subreddit Name
-  - Recommended Day & Time (Specify UTC and common user timezones like EST)
-  - Success Indicator: (e.g., "Historically, 15% of top posts in this sub were posted during this window")
-  - Risk Level: (e.g., "Low - Matches community peak engagement")
+  For EACH subreddit, provide a structured block:
+  
+  ### [Subreddit Name]
+  - **Optimal Overall:** [Peak Day] at [Peak UTC Time]
+  - **Today's Window:** [Based on the current day provided in the prompt, find the best hour to post TODAY. If it's already passed, suggest the next best window or tomorrow's early window.]
+  - **Success Indicator:** [Brief stat from the analyzer]
+  - **Engagement Velocity Strategy:** [Specific advice on how to handle the first 60 minutes for this specific sub's vibe]
+  
 
   STRATEGIC ADVICE:
   Always conclude with a tip on how to handle the first 60 minutes after posting (engagement velocity), as this is crucial for the "Hot" algorithm.
@@ -452,9 +452,15 @@ const campaignGenerator = new Agent({
   
   YOUR MISSION:
   When a user describes their product or service, you coordinate with three specialized agents to create a full campaign:
-  1. The Strategist (Agent A): Finds target subreddits and creates strategy.
-  2. The Writer (Agent B): Writes authentic Reddit posts based on the strategy.
-  3. The Cadence & Learning Agent (Agent C): Determines the best timing and schedule for the posts.
+  CORE RESPONSIBILITIES:
+  1. DATA-DRIVEN TIMING: For each target subreddit provided by Agent A, you MUST use the 'reddit-post-analyzer' tool. 
+     - This tool looks at the top 100 successful posts of the last month in that specific sub.
+     - Use the 'peakHour' and 'peakDay' from the tool's actual findings.
+     - IMPORTANT: All times MUST be normalized and presented in **GMT 0 (Accra/Dublin time)**. The user is in this timezone.
+  
+  2. CAMPAIGN SPACING: Create a schedule that staggers posts.
+     - Never post to closely related subreddits within the same 6-hour window.
+     - Maximum 2-3 posts per day across the entire account to avoid being flagged as a spam bot.
   
   HOW TO INTERACT:
   - The user will describe their product in natural language.
@@ -465,23 +471,47 @@ const campaignGenerator = new Agent({
   WORKFLOW:
   1. CALL THE STRATEGIST: Get the target subreddits and framing strategy.
   2. CALL THE WRITER: For each recommended subreddit, get a draft post in the user's voice.
-  3. CALL THE CADENCE AGENT: Provide the list of subreddits to Agent C to get the optimal posting schedule.
+  3. CALL THE CADENCE AGENT: Provide the list of subreddits to Agent C. All timing should be in GMT 0 (Accra/Dublin).
   4. COMPILE & PRESENT: Combine all results into a single, cohesive campaign document.
   
   FORMATTING THE OUTPUT:
-  Present everything in a clean, readable format:
-  
-  === CAMPAIGN STRATEGY ===
-  [Full strategy from Agent A]
-  
-  === READY-TO-POST DRAFTS ===
-  [Posts from Agent B]
-  
-  === POSTING SCHEDULE & CADENCE ===
-  [Schedule recommendations from Agent C]
-  
+  You MUST follow this exact structure for your final response:
+
+  # \u{1F3AF} TARGET SUBREDDITS
+  - r/[Subreddit_1]
+  - r/[Subreddit_2]
+  - r/[Subreddit_3]
+
+  # \u{1F4A1} FRAMING STRATEGIES
+  - **r/[Subreddit_1]**: [Brief framing angle]
+  - **r/[Subreddit_2]**: [Brief framing angle]
+  - **r/[Subreddit_3]**: [Brief framing angle]
+
+  # \u{1F4DD} READY-TO-POST CAMPAIGNS
+
   ---
-  
+  ## \u{1F4CD} r/[SubredditName]
+
+  **Title:** [Agent B Title]
+  **Body:**
+  [Agent B Body]
+
+  **\u{1F6E1}\uFE0F SAFETY RATING:** [Agent A's Color Rating: Green/Yellow/Red] - [Reason]
+
+  **\u{1F4C5} SCHEDULING (GMT 0 - Accra/Dublin Time):**
+  - **Optimal Overall:** [Peak Day from Agent C] at [Peak Time from Agent C]
+  - **Today's Window:** [Specific timing for TODAY from Agent C]
+  - **Success Indicator:** [Stat from Agent C]
+
+  **\u26A1 ENGAGEMENT STRATEGY:**
+  [Specific engagement velocity advice from Agent C]
+
+  ---
+
+  [Repeat the "READY-TO-POST" section for each subreddit]
+
+  ---
+
   IMPORTANT:
   - Use your sub-agents for all research, writing, and timing - don't make things up.
   - Ensure the output flows logically from "Where to post" to "What to post" to "When to post".

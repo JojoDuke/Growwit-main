@@ -1,4 +1,5 @@
 import { Agent } from "@mastra/core/agent";
+import { MODELS } from "../models";
 
 export const writer = new Agent({
    id: "writer",
@@ -92,5 +93,5 @@ export const writer = new Agent({
   
   If you catch yourself using forbidden phrases, STOP and rewrite in the reference voice.
   `,
-   model: "openai/gpt-4o",
+   model: MODELS.WRITER,
 });

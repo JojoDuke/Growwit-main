@@ -1,6 +1,7 @@
 import { Agent } from "@mastra/core/agent";
 import { searchTool } from "../tools/search";
 import { redditPostAnalyzer } from "../tools/reddit-post-analyzer";
+import { MODELS } from "../models";
 
 export const cadenceAgent = new Agent({
    id: "cadence-agent",
@@ -22,15 +23,18 @@ export const cadenceAgent = new Agent({
   3. CONTEXTUAL OVERRIDES: Use the 'search-tool' ONLY to find human-imposed rules like "Self-promo Saturday" or "Feedback Fridays" that might restrict the technical peak windows discovered by the data analyzer.
 
   OUTPUT FORMAT:
-  Present a clear "Campaign Schedule" that includes:
-  - Subreddit Name
-  - Recommended Day & Time (Specify UTC and common user timezones like EST)
-  - Success Indicator: (e.g., "Historically, 15% of top posts in this sub were posted during this window")
-  - Risk Level: (e.g., "Low - Matches community peak engagement")
+  For EACH subreddit, provide a structured block:
+  
+  ### [Subreddit Name]
+  - **Optimal Overall:** [Peak Day] at [Peak UTC Time]
+  - **Today's Window:** [Based on the current day provided in the prompt, find the best hour to post TODAY. If it's already passed, suggest the next best window or tomorrow's early window.]
+  - **Success Indicator:** [Brief stat from the analyzer]
+  - **Engagement Velocity Strategy:** [Specific advice on how to handle the first 60 minutes for this specific sub's vibe]
+  
 
   STRATEGIC ADVICE:
   Always conclude with a tip on how to handle the first 60 minutes after posting (engagement velocity), as this is crucial for the "Hot" algorithm.
   `,
-   model: "openai/gpt-4o",
+   model: MODELS.CADENCE,
    tools: { searchTool, redditPostAnalyzer },
 });
