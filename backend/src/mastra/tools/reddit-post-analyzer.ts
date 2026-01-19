@@ -24,13 +24,18 @@ export const redditPostAnalyzer = createTool({
             throw new Error("No subreddit name provided");
         }
 
+        const cleanSubreddit = subreddit.replace(/^r\//, '').trim();
+        const url = `https://www.reddit.com/r/${cleanSubreddit}/top/.json?t=month&limit=100`;
+        console.log(`🔍 Reddit Analyzer: Fetching ${url}`);
+
         try {
-            // Fetch top 100 posts from the last month
             const response = await fetch(
-                `https://www.reddit.com/r/${subreddit}/top/.json?t=month&limit=100`,
+                url,
                 {
                     headers: {
-                        'User-Agent': 'Growwit-Data-Analyst/1.0'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json',
+                        'Referer': 'https://www.reddit.com/'
                     }
                 }
             );

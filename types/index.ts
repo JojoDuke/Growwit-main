@@ -10,7 +10,6 @@ export interface Campaign {
   name: string;
   product: string;
   goal: 'discussion' | 'dms' | 'profile' | 'traffic' | 'calls';
-  targetAudience?: string;
   accounts: Account[];
   postsPerMonth: number;
   commentsPerDay: { min: number; max: number };

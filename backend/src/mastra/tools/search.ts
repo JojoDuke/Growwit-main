@@ -27,34 +27,47 @@ export const searchTool = createTool({
             throw new Error("TAVILY_API_KEY is not set in environment variables");
         }
 
-        const response = await fetch("https://api.tavily.com/search", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                api_key: apiKey,
-                query,
-                search_depth: "advanced",
-                include_images: false,
-                include_answer: false,
-                max_results: 5,
-            }),
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`Tavily API error: ${error}`);
+        try {
+            const response = await fetch("https://api.tavily.com/search", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                signal: controller.signal,
+                body: JSON.stringify({
+                    api_key: apiKey,
+                    query,
+                    search_depth: "advanced",
+                    include_images: false,
+                    include_answer: false,
+                    max_results: 5,
+                }),
+            });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const error = await response.text();
+                throw new Error(`Tavily API error: ${error}`);
+            }
+
+            const data = await response.json();
+
+            return {
+                results: data.results.map((r: any) => ({
+                    title: r.title,
+                    url: r.url,
+                    content: r.content,
+                })),
+            };
+        } catch (error: any) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error("Search tool timed out after 15 seconds");
+            }
+            throw error;
         }
-
-        const data = await response.json();
-
-        return {
-            results: data.results.map((r: any) => ({
-                title: r.title,
-                url: r.url,
-                content: r.content,
-            })),
-        };
     },
 });

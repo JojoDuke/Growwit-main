@@ -31,14 +31,19 @@ export const redditRulesTool = createTool({
         if (!subreddit) {
             throw new Error("No subreddit name provided to tool");
         }
+        const cleanSubreddit = subreddit.replace(/^r\//, '').trim();
+        console.log(`🔍 Reddit Rules: Scouting r/${cleanSubreddit}`);
 
         try {
             // Fetch subreddit info
+            const aboutUrl = `https://www.reddit.com/r/${cleanSubreddit}/about.json`;
             const aboutResponse = await fetch(
-                `https://www.reddit.com/r/${subreddit}/about.json`,
+                aboutUrl,
                 {
                     headers: {
-                        'User-Agent': 'Growwit-Research-Bot/1.0'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json',
+                        'Referer': 'https://www.reddit.com/'
                     }
                 }
             );
@@ -65,10 +70,12 @@ export const redditRulesTool = createTool({
 
             // Fetch rules
             const rulesResponse = await fetch(
-                `https://www.reddit.com/r/${subreddit}/about/rules.json`,
+                `https://www.reddit.com/r/${cleanSubreddit}/about/rules.json`,
                 {
                     headers: {
-                        'User-Agent': 'Growwit-Research-Bot/1.0'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json',
+                        'Referer': 'https://www.reddit.com/'
                     }
                 }
             );

@@ -98,6 +98,16 @@ export default function HomeScreen() {
             >
               <Text style={styles.createButtonText}>Create Campaign</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.testButton}
+              onPress={() => {
+                setShowNewCampaignModal(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.testButtonText}>Test Strategist (Zest AI)</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -161,34 +171,127 @@ export default function HomeScreen() {
       <NewCampaignModal
         visible={showNewCampaignModal}
         onClose={() => setShowNewCampaignModal(false)}
-        onSubmit={async (campaign: Campaign) => {
-          await addCampaign(campaign);
-          setShowNewCampaignModal(false);
-          // Stay on home to see the new actions
+        onGenerate={async (campaign, onStreamChunk) => {
+          let fullOutput = "";
+          const response = await fetch('http://localhost:3001/api/generate-campaign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              productName: campaign.name,
+              productDescription: campaign.product,
+              userGoal: campaign.goal,
+            }),
+          });
+
+          if (!response.ok) throw new Error('Failed to generate campaign');
+
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+
+          if (reader) {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              const chunk = decoder.decode(value);
+              fullOutput += chunk;
+              onStreamChunk(chunk);
+            }
+          }
+          return fullOutput;
+        }}
+        onSave={async (campaign, fullOutput) => {
+          // Parse the full output to extract actions
+          const initialActions = parseCampaignOutput(fullOutput, campaign.id, campaign.accounts[0].id);
+          await addCampaign(campaign, initialActions);
         }}
       />
     </SafeAreaView>
   );
 }
 
+/**
+ * Robust regex parser to convert the Orchestrator's structured text 
+ * into Action objects for the CampaignContext.
+ */
+function parseCampaignOutput(text: string, campaignId: string, accountId: string): any[] {
+  const actions: any[] = [];
+
+  // Use regex to find "## 📍 r/SubredditName" blocks
+  const subredditBlocks = text.split(/## 📍 r\//g).slice(1);
+
+  subredditBlocks.forEach(block => {
+    try {
+      const firstLine = block.split('\n')[0];
+      const subreddit = firstLine.replace(/[#*\s]/g, '').trim();
+
+      const titleMatch = block.match(/\*\*Title:\*\* (.*)/);
+      const title = titleMatch ? titleMatch[1].trim() : "Reddit Campaign Post";
+
+      // Extract body between "**Body:**" and the next bold marker (Safety or Scheduling)
+      const bodyPart = block.split(/\*\*Body:\*\*/i)[1];
+      const body = bodyPart ? bodyPart.split(/\*\*\🛡️|\*\*\📅|\*\*\⚡/)[0].trim() : "";
+
+      if (subreddit && body) {
+        actions.push({
+          id: `action-ai-${Date.now()}-${actions.length}`,
+          campaignId,
+          accountId,
+          type: 'post',
+          status: 'pending',
+          subreddit,
+          title,
+          content: body,
+          scheduledFor: new Date().toISOString(),
+        });
+      }
+    } catch (e) {
+      console.error("Error parsing subreddit block:", e);
+    }
+  });
+
+  return actions;
+}
+
 function NewCampaignModal({
   visible,
   onClose,
-  onSubmit,
+  onGenerate,
+  onSave,
 }: {
   visible: boolean;
   onClose: () => void;
-  onSubmit: (campaign: Campaign) => void;
+  onGenerate: (campaign: Campaign, onStreamChunk: (chunk: string) => void) => Promise<string>;
+  onSave: (campaign: Campaign, output: string) => Promise<void>;
 }) {
+  const [generatedCampaign, setGeneratedCampaign] = useState<Campaign | null>(null);
   const [name, setName] = useState<string>("");
   const [product, setProduct] = useState<string>("");
   const [goal, setGoal] = useState<string>("discussion");
-  const [targetAudience, setTargetAudience] = useState<string>("");
   const [accountAge, setAccountAge] = useState<string>("");
   const [accountKarma, setAccountKarma] = useState<string>("");
   const [accountName, setAccountName] = useState<string>("");
   const [accounts, setAccounts] = useState<string[]>([]);
   const [postsPerMonth, setPostsPerMonth] = useState<string>("50");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiOutput, setAiOutput] = useState("");
+  const [currentStep, setCurrentStep] = useState<number>(0);
+
+  const steps = [
+    { id: 1, label: "Analyzing Product & Goal", icon: "target" },
+    { id: 2, label: "Scouting Target Subreddits", icon: "search" },
+    { id: 3, label: "Scraping Community Rules", icon: "shield" },
+    { id: 4, label: "Generating Strategy & Post Drafts", icon: "edit" },
+    { id: 5, label: "Calculating Peak Cadence", icon: "clock" },
+  ];
+
+  const triggerTestRun = () => {
+    setName("Zest AI");
+    setProduct("AI meal planner for busy software engineers. Looking for 5 beta testers to try it out!");
+    setGoal("discussion");
+    setAccountAge("90");
+    setAccountKarma("1500");
+    setAccounts(["u/ZestChef"]);
+  };
 
   const isFormValid = name.trim() !== "" &&
     product.trim() !== "" &&
@@ -198,17 +301,25 @@ function NewCampaignModal({
     postsPerMonth !== "" &&
     accounts.length > 0;
 
-  const handleSubmit = () => {
-    if (!name || !product || accounts.length === 0) {
-      return;
-    }
+  const handleSubmit = async () => {
+    if (!name || !product || accounts.length === 0) return;
+
+    setIsGenerating(true);
+    setCurrentStep(1);
+    setAiOutput("");
+
+    const updateSteps = (text: string) => {
+      if (text.includes("TARGET SUBREDDITS")) setCurrentStep(2);
+      if (text.includes("RULES") || text.includes("SAFETY")) setCurrentStep(3);
+      if (text.includes("READY-TO-POST")) setCurrentStep(4);
+      if (text.includes("SCHEDULING") || text.includes("GMT")) setCurrentStep(5);
+    };
 
     const campaign: Campaign = {
       id: `campaign-${Date.now()}`,
       name,
       product,
       goal: goal as Campaign["goal"],
-      targetAudience: targetAudience || undefined,
       accounts: accounts.map((acc, idx) => ({
         id: `account-${idx}`,
         name: acc,
@@ -218,23 +329,40 @@ function NewCampaignModal({
       postsPerMonth: parseInt(postsPerMonth) || 50,
       commentsPerDay: { min: 3, max: 7 },
       createdAt: new Date().toISOString(),
-      status: "draft",
+      status: "active",
     };
 
-    onSubmit(campaign);
-    resetForm();
+    setGeneratedCampaign(campaign);
+
+    try {
+      await onGenerate(campaign, (chunk) => {
+        setAiOutput((prev) => prev + chunk);
+        updateSteps(chunk);
+      });
+      setCurrentStep(6);
+      /* 
+       Wait for user manual confirmation. 
+       Do NOT auto-close. 
+      */
+    } catch (error) {
+      Alert.alert("Error", "Failed to generate campaign.");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const resetForm = () => {
+    setGeneratedCampaign(null);
     setName("");
     setProduct("");
     setGoal("discussion");
-    setTargetAudience("");
     setAccountAge("");
     setAccountKarma("");
     setAccountName("");
     setAccounts([]);
     setPostsPerMonth("50");
+    setAiOutput("");
+    setCurrentStep(0);
   };
 
   const addAccount = () => {
@@ -245,33 +373,19 @@ function NewCampaignModal({
   };
 
   const pan = useRef(new Animated.ValueXY()).current;
-
-  useEffect(() => {
-    if (visible) {
-      pan.setValue({ x: 0, y: 0 });
-    }
-  }, [visible]);
-
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dy) > 5;
-      },
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
       onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          pan.setValue({ x: 0, y: gestureState.dy });
-        }
+        if (gestureState.dy > 0) pan.setValue({ x: 0, y: gestureState.dy });
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 120 || gestureState.vy > 0.5) {
-          onClose();
-        } else {
+        if (gestureState.dy > 120 || gestureState.vy > 0.5) onClose();
+        else {
           Animated.spring(pan, {
             toValue: { x: 0, y: 0 },
             useNativeDriver: false,
-            tension: 50,
-            friction: 10,
           }).start();
         }
       },
@@ -279,29 +393,14 @@ function NewCampaignModal({
   ).current;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <Animated.View
-          style={[
-            styles.modalContainer,
-            { transform: [{ translateY: pan.y }] }
-          ]}
-        >
-          <View
-            style={styles.modalHandleContainer}
-            {...panResponder.panHandlers}
-          >
+        <Animated.View style={[styles.modalContainer, { transform: [{ translateY: pan.y }] }]}>
+          <View style={styles.modalHandleContainer} {...panResponder.panHandlers}>
             <View style={styles.modalHandle} />
           </View>
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={onClose}>
-              <Text style={styles.modalCancel}>Cancel</Text>
-            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose}><Text style={styles.modalCancel}>Cancel</Text></TouchableOpacity>
             <Text style={styles.modalTitle}>New Campaign</Text>
             <View style={{ width: 60 }} />
           </View>
@@ -309,141 +408,96 @@ function NewCampaignModal({
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
               <Text style={styles.label}>Campaign Name</Text>
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="e.g., Launch Product X"
-                placeholderTextColor="#94A3B8"
-              />
+              <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g., Launch Product X" />
             </View>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Product/Service</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={product}
-                onChangeText={setProduct}
-                placeholder="What are you promoting?"
-                placeholderTextColor="#94A3B8"
-                multiline
-                numberOfLines={3}
-              />
+              <TextInput style={[styles.input, styles.textArea]} value={product} onChangeText={setProduct} multiline numberOfLines={3} placeholder="What are you promoting?" />
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Select Campaign Goal</Text>
+              <Text style={styles.label}>Goal</Text>
               <View style={styles.goalButtons}>
-                {[
-                  { id: "discussion", label: "Spark Discussion" },
-                  { id: "dms", label: "Inbound DMs" },
-                  { id: "profile", label: "Profile Discovery" },
-                ].map((g) => (
-                  <TouchableOpacity
-                    key={g.id}
-                    style={[styles.goalButton, goal === g.id && styles.goalButtonActive]}
-                    onPress={() => setGoal(g.id)}
-                  >
-                    <Text style={[styles.goalButtonText, goal === g.id && styles.goalButtonTextActive]}>
-                      {g.label}
-                    </Text>
+                {["discussion", "dms", "profile"].map((g) => (
+                  <TouchableOpacity key={g} style={[styles.goalButton, goal === g && styles.goalButtonActive]} onPress={() => setGoal(g)}>
+                    <Text style={[styles.goalButtonText, goal === g && styles.goalButtonTextActive]}>{g}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Target Audience</Text>
-              <TextInput
-                style={styles.input}
-                value={targetAudience}
-                onChangeText={setTargetAudience}
-                placeholder="e.g., Solo founders, SaaS developers"
-                placeholderTextColor="#94A3B8"
-              />
-            </View>
-
             <View style={{ flexDirection: "row", gap: 16, marginBottom: 24 }}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>Account Age (Days)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={accountAge}
-                  onChangeText={setAccountAge}
-                  placeholder="30"
-                  keyboardType="number-pad"
-                  placeholderTextColor="#94A3B8"
-                />
+                <Text style={styles.label}>Age (Days)</Text>
+                <TextInput style={styles.input} value={accountAge} onChangeText={setAccountAge} keyboardType="number-pad" placeholder="30" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>Average Karma</Text>
-                <TextInput
-                  style={styles.input}
-                  value={accountKarma}
-                  onChangeText={setAccountKarma}
-                  placeholder="500"
-                  keyboardType="number-pad"
-                  placeholderTextColor="#94A3B8"
-                />
+                <Text style={styles.label}>Karma</Text>
+                <TextInput style={styles.input} value={accountKarma} onChangeText={setAccountKarma} keyboardType="number-pad" placeholder="500" />
               </View>
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Reddit Accounts</Text>
+              <Text style={styles.label}>Accounts</Text>
               <View style={styles.accountInputRow}>
-                <TextInput
-                  style={[styles.input, styles.accountInput]}
-                  value={accountName}
-                  onChangeText={setAccountName}
-                  placeholder="u/accountname"
-                  placeholderTextColor="#94A3B8"
-                  onSubmitEditing={addAccount}
-                  returnKeyType="done"
-                />
-                <TouchableOpacity style={styles.addAccountButton} onPress={addAccount}>
-                  <Plus size={20} color="#FF6B35" />
-                </TouchableOpacity>
+                <TextInput style={[styles.input, styles.accountInput]} value={accountName} onChangeText={setAccountName} placeholder="u/name" />
+                <TouchableOpacity style={styles.addAccountButton} onPress={addAccount}><Plus size={20} color="#FF6B35" /></TouchableOpacity>
               </View>
-              {accounts.length > 0 && (
-                <View style={styles.accountsList}>
-                  {accounts.map((acc, idx) => (
-                    <View key={idx} style={styles.accountChip}>
-                      <Text style={styles.accountChipText}>{acc}</Text>
-                      <TouchableOpacity onPress={() => setAccounts(accounts.filter((_, i) => i !== idx))}>
-                        <Text style={styles.accountChipRemove}>×</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              )}
+              <View style={styles.accountsList}>
+                {accounts.map((acc, idx) => (
+                  <View key={idx} style={styles.accountChip}>
+                    <Text style={styles.accountChipText}>{acc}</Text>
+                    <TouchableOpacity onPress={() => setAccounts(accounts.filter((_, i) => i !== idx))}><Text>×</Text></TouchableOpacity>
+                  </View>
+                ))}
+              </View>
             </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Posts Per Month</Text>
-              <TextInput
-                style={styles.input}
-                value={postsPerMonth}
-                onChangeText={setPostsPerMonth}
-                placeholder="50"
-                keyboardType="number-pad"
-                placeholderTextColor="#94A3B8"
-              />
-            </View>
-            <View style={{ height: 40 }} />
           </ScrollView>
 
           <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={[
-                styles.modalSubmitButton,
-                !isFormValid && styles.modalSubmitButtonDisabled
-              ]}
-              onPress={handleSubmit}
-              disabled={!isFormValid}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.modalSubmitButtonText}>Create Campaign</Text>
-            </TouchableOpacity>
+            {isGenerating || aiOutput ? (
+              <View style={styles.chatInterface}>
+                <View style={styles.thinkingHeader}>
+                  <Text style={styles.thinkingStatus}>{currentStep < 5 ? "AI Researcher is scoutng..." : "Research Complete"}</Text>
+                  <View style={[styles.pulseCircle, currentStep < 5 && styles.pulseActive]} />
+                </View>
+
+                <ScrollView
+                  style={styles.chatScroll}
+                  contentContainerStyle={styles.chatScrollContent}
+                  ref={(ref) => ref?.scrollToEnd({ animated: true })}
+                >
+                  <View style={styles.aiBubble}>
+                    <Text style={styles.aiBubbleText}>{aiOutput || "Starting research process..."}</Text>
+                  </View>
+                </ScrollView>
+
+                {currentStep >= 5 && (
+                  <TouchableOpacity
+                    style={styles.chatCloseButton}
+                    onPress={() => {
+                      if (generatedCampaign) {
+                        onSave(generatedCampaign, aiOutput);
+                      }
+                      onClose();
+                      resetForm();
+                    }}
+                  >
+                    <Text style={styles.chatCloseButtonText}>Done</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <View style={{ gap: 12 }}>
+                <TouchableOpacity style={[styles.modalSubmitButton, !isFormValid && styles.modalSubmitButtonDisabled]} onPress={handleSubmit} disabled={!isFormValid}>
+                  <Text style={styles.modalSubmitButtonText}>Generate Campaign</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.ghostButton} onPress={triggerTestRun}>
+                  <Text style={styles.ghostButtonText}>Auto-fill Zest AI (Test)</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </Animated.View>
       </View>
@@ -1028,5 +1082,87 @@ const styles = StyleSheet.create({
     backgroundColor: "#CBD5E1",
     shadowOpacity: 0,
     elevation: 0,
+  },
+  testButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: "#F1F5F9",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  testButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  chatInterface: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 16,
+    height: 450,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  thinkingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  thinkingStatus: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  pulseCircle: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#E2E8F0',
+  },
+  pulseActive: {
+    backgroundColor: '#FF6B35',
+  },
+  chatScroll: {
+    flex: 1,
+  },
+  chatScrollContent: {
+    paddingBottom: 20,
+  },
+  aiBubble: {
+    backgroundColor: '#F1F5F9',
+    padding: 16,
+    borderRadius: 16,
+    borderTopLeftRadius: 4,
+    maxWidth: '90%',
+  },
+  aiBubbleText: {
+    color: '#334155',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  chatCloseButton: {
+    marginTop: 12,
+    backgroundColor: '#FF6B35',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  chatCloseButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  ghostButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  ghostButtonText: {
+    fontSize: 14,
+    color: '#94A3B8',
+    fontWeight: '600',
   },
 });

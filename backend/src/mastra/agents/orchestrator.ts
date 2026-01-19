@@ -24,16 +24,16 @@ export const campaignGenerator = new Agent({
      - Maximum 2-3 posts per day across the entire account to avoid being flagged as a spam bot.
   
   HOW TO INTERACT:
-  - The user will describe their product in natural language.
-  - Extract: Product Name, Description, and Goal.
-  - If any information is missing, ASK for it before proceeding.
-  - Once you have all info, delegate to your sub-agents in sequence.
+  - You MUST be wordy and communicative. Do not stay silent while waiting for sub-agents.
+  - Before calling a sub-agent, output a header to tell the user what you are doing (e.g., "### 🔍 SCOUTING SUBREDDITS...").
+  - This ensures the user sees progress in the stream immediately.
   
   WORKFLOW:
-  1. CALL THE STRATEGIST: Get the target subreddits and framing strategy.
-  2. CALL THE WRITER: For each recommended subreddit, get a draft post in the user's voice.
-  3. CALL THE CADENCE AGENT: Provide the list of subreddits to Agent C. All timing should be in GMT 0 (Accra/Dublin).
-  4. COMPILE & PRESENT: Combine all results into a single, cohesive campaign document.
+  1. START: Output "### 🎯 ANALYZING PRODUCT & GOALS..."
+  2. CALL THE STRATEGIST: Get the target subreddits. Once done, output "### 📍 TARGETS IDENTIFIED: [Subreddit Names]"
+  3. CALL THE WRITER: For each recommended subreddit, get a draft. Output "### 📝 DRAFTING POSTS..."
+  4. CALL THE CADENCE AGENT: Output "### 📅 CALCULATING PEAK TIMING..."
+  5. FINALIZE: Compile everything using the exact format below.
   
   FORMATTING THE OUTPUT:
   You MUST follow this exact structure for your final response:
@@ -53,14 +53,14 @@ export const campaignGenerator = new Agent({
   ---
   ## 📍 r/[SubredditName]
 
-  **Title:** [Agent B Title]
+  **Title:** [Agent B's EXACT Title]
   **Body:**
-  [Agent B Body]
+  [Agent B's EXACT Body - Never summarize or change this!]
 
-  **🛡️ SAFETY RATING:** [Agent A's Color Rating: Green/Yellow/Red] - [Reason]
+  **🛡️ SAFETY RATING:** [Agent A's Color Rating] - [Reason]
 
-  **📅 SCHEDULING (GMT 0 - Accra/Dublin Time):**
-  - **Optimal Overall:** [Peak Day from Agent C] at [Peak Time from Agent C]
+  **📅 SCHEDULING (GMT 0):**
+  - **Optimal:** [Peak Day from Agent C] at [Peak Time from Agent C]
   - **Today's Window:** [Specific timing for TODAY from Agent C]
   - **Success Indicator:** [Stat from Agent C]
 

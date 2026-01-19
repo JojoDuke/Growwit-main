@@ -24,7 +24,7 @@ interface CampaignContextType {
   safetyRules: SafetyRules;
   safetyMetrics: SafetyMetrics;
   isLoading: boolean;
-  addCampaign: (campaign: Campaign) => Promise<void>;
+  addCampaign: (campaign: Campaign, initialActions?: Action[]) => Promise<void>;
   updateCampaign: (campaignId: string, updates: Partial<Campaign>) => Promise<void>;
   deleteCampaign: (campaignId: string) => Promise<void>;
   completeAction: (actionId: string) => Promise<void>;
@@ -60,20 +60,20 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
       discussion: [
         {
           title: `How do you handle ${campaign.product} in your workflow?`,
-          content: `I've been thinking a lot about ${campaign.product} lately. Does anyone have experience with this?\n\nSpecifically interested in how it affects ${campaign.targetAudience || "daily operations"}.`
+          content: `I've been thinking a lot about ${campaign.product} lately. Does anyone have experience with this?\n\nSpecifically interested in how it affects daily operations.`
         },
         {
-          title: `The biggest challenge with ${campaign.targetAudience || "this field"} is...`,
+          title: `The biggest challenge with ${campaign.product} is...`,
           content: `In my experience, most people struggle with the ${campaign.product} aspect of things. I'm curious to hear how others are solving this?`
         },
         {
           title: `A quick question for those using ${campaign.product} tools`,
-          content: `I'm trying to optimize my setup for ${campaign.targetAudience || "productivity"}. What are your go-to strategies?`
+          content: `I'm trying to optimize my setup for productivity. What are your go-to strategies?`
         }
       ],
       dms: [
         {
-          title: `Anyone else struggling with ${campaign.targetAudience || "this"}?`,
+          title: `Anyone else struggling with this?`,
           content: `Found a weird pattern while working on ${campaign.product}. Wondering if anyone else has seen this?\n\nHappy to share more details via DM if you're dealing with the same thing.`,
           cta: "Feel free to DM me to compare notes."
         }
@@ -81,7 +81,7 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
       profile: [
         {
           title: `Finally solved the ${campaign.product} problem`,
-          content: `It took a few weeks of iterating, but I finally found a way to handle ${campaign.targetAudience || "technical"} debt in this area. Just wanted to share the win!`,
+          content: `It took a few weeks of iterating, but I finally found a way to handle technical debt in this area. Just wanted to share the win!`,
         }
       ]
     };
@@ -145,15 +145,21 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
     setActions(prev => [...prev, nextAction]);
   };
 
-  const addCampaign = async (campaign: Campaign) => {
+  const addCampaign = async (campaign: Campaign, initialActions?: Action[]) => {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
 
-    const initialActions = generateInitialActions(campaign);
+    try {
+      const actionsToSet = initialActions && initialActions.length > 0
+        ? initialActions
+        : generateInitialActions(campaign);
 
-    setCampaigns(prev => [...prev, { ...campaign, status: "active" }]);
-    setActions(prev => [...prev, ...initialActions]);
-    setIsLoading(false);
+      setCampaigns(prev => [...prev, { ...campaign, status: "active" }]);
+      setActions(prev => [...prev, ...actionsToSet]);
+    } catch (error) {
+      console.error('Error adding campaign:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const completeAction = async (actionId: string) => {
