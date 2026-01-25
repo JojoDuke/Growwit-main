@@ -15,12 +15,33 @@ import {
   PanResponder,
   Alert,
   Linking,
+  Platform,
+  UIManager,
+  LayoutAnimation,
 } from "react-native";
 import * as Clipboard from 'expo-clipboard';
-import { Clock, CheckCircle2, AlertCircle, Copy, Target, Plus, ExternalLink, ShieldCheck } from "lucide-react-native";
+import {
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Copy,
+  Target,
+  Plus,
+  ExternalLink,
+  ShieldCheck,
+  Brain,
+  Bot,
+  Sparkles,
+  Search,
+  Zap
+} from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { format, isToday, parseISO } from "date-fns";
 import { useRef, useEffect } from "react";
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export default function HomeScreen() {
   const { campaigns, actions, addCampaign, completeAction } = useCampaigns();
@@ -97,6 +118,16 @@ export default function HomeScreen() {
               activeOpacity={0.7}
             >
               <Text style={styles.createButtonText}>Create Campaign</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.testButton, { backgroundColor: '#FF6B35', borderColor: '#FF6B35' }]}
+              onPress={() => {
+                router.push('/agent-playground' as any);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.testButtonText, { color: '#FFF' }]}>UI Lab (Prototyping)</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -252,6 +283,93 @@ function parseCampaignOutput(text: string, campaignId: string, accountId: string
   return actions;
 }
 
+const AgentStatus = ({ step, status }: { step: number; status: string }) => {
+  const pulseScale = useRef(new Animated.Value(1)).current;
+  const pulseOpacity = useRef(new Animated.Value(0.4)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(pulseScale, { toValue: 1.4, duration: 1500, useNativeDriver: true }),
+          Animated.timing(pulseScale, { toValue: 1, duration: 1500, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(pulseOpacity, { toValue: 0.1, duration: 1500, useNativeDriver: true }),
+          Animated.timing(pulseOpacity, { toValue: 0.4, duration: 1500, useNativeDriver: true }),
+        ]),
+      ])
+    ).start();
+  }, []);
+
+  const getStepIcon = (s: number) => {
+    switch (s) {
+      case 1: return <Brain size={20} color="#FF6B35" />;
+      case 2: return <Search size={20} color="#FF6B35" />;
+      case 3: return <ShieldCheck size={20} color="#FF6B35" />;
+      case 4: return <Zap size={20} color="#FF6B35" />;
+      case 5: return <Clock size={20} color="#FF6B35" />;
+      default: return <Sparkles size={20} color="#FF6B35" />;
+    }
+  };
+
+  return (
+    <View style={styles.thinkingHeader}>
+      <View style={styles.agentAvatarContainer}>
+        <Animated.View style={[styles.agentPulse, { transform: [{ scale: pulseScale }], opacity: pulseOpacity }]} />
+        <View style={styles.agentAvatar}>
+          <Bot size={28} color="#FFF" />
+        </View>
+      </View>
+      <View style={styles.thinkingInfo}>
+        <Text style={styles.thinkingStatus}>{status}</Text>
+        <View style={styles.activeStepContainer}>
+          {getStepIcon(step)}
+          <Text style={styles.activeStepLabel}>Step {step} of 5</Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const ThinkingDots = () => {
+  const dot1 = useRef(new Animated.Value(0.3)).current;
+  const dot2 = useRef(new Animated.Value(0.3)).current;
+  const dot3 = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const animateDot = (val: Animated.Value, delay: number) => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(val, { toValue: 1, duration: 400, useNativeDriver: true }),
+          Animated.timing(val, { toValue: 0.3, duration: 400, useNativeDriver: true }),
+        ])
+      ).start();
+    };
+    animateDot(dot1, 0);
+    animateDot(dot2, 200);
+    animateDot(dot3, 400);
+  }, []);
+
+  return (
+    <View style={styles.dotsContainer}>
+      <Animated.View style={[styles.dot, { opacity: dot1 }]} />
+      <Animated.View style={[styles.dot, { opacity: dot2 }]} />
+      <Animated.View style={[styles.dot, { opacity: dot3 }]} />
+    </View>
+  );
+};
+
+const ProgressBar = ({ step }: { step: number }) => {
+  const width = (step / 5) * 100;
+  return (
+    <View style={styles.progressBarBg}>
+      <View style={[styles.progressBarFill, { width: `${width}%` }]} />
+    </View>
+  );
+};
+
 function NewCampaignModal({
   visible,
   onClose,
@@ -309,6 +427,7 @@ function NewCampaignModal({
     setAiOutput("");
 
     const updateSteps = (text: string) => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       if (text.includes("TARGET SUBREDDITS")) setCurrentStep(2);
       if (text.includes("RULES") || text.includes("SAFETY")) setCurrentStep(3);
       if (text.includes("READY-TO-POST")) setCurrentStep(4);
@@ -458,24 +577,34 @@ function NewCampaignModal({
           <View style={styles.modalFooter}>
             {isGenerating || aiOutput ? (
               <View style={styles.chatInterface}>
-                <View style={styles.thinkingHeader}>
-                  <Text style={styles.thinkingStatus}>{currentStep < 5 ? "AI Researcher is scoutng..." : "Research Complete"}</Text>
-                  <View style={[styles.pulseCircle, currentStep < 5 && styles.pulseActive]} />
-                </View>
+                <ProgressBar step={currentStep} />
+                <AgentStatus
+                  step={currentStep}
+                  status={currentStep < 5 ? (isGenerating && !aiOutput ? "Initializing..." : "Agent is working...") : "Strategy Finalized"}
+                />
 
                 <ScrollView
                   style={styles.chatScroll}
                   contentContainerStyle={styles.chatScrollContent}
                   ref={(ref) => ref?.scrollToEnd({ animated: true })}
+                  showsVerticalScrollIndicator={false}
                 >
                   <View style={styles.aiBubble}>
-                    <Text style={styles.aiBubbleText}>{aiOutput || "Starting research process..."}</Text>
+                    <View style={styles.aiBubbleHeader}>
+                      <Sparkles size={14} color="#FF6B35" />
+                      <Text style={styles.aiBubbleTitle}>GROWWIT AGENT</Text>
+                    </View>
+                    {!aiOutput && isGenerating ? (
+                      <ThinkingDots />
+                    ) : (
+                      <Text style={styles.aiBubbleText}>{aiOutput || "Initializing tools..."}</Text>
+                    )}
                   </View>
                 </ScrollView>
 
                 {currentStep >= 5 && (
                   <TouchableOpacity
-                    style={styles.chatCloseButton}
+                    style={[styles.chatCloseButton, { backgroundColor: '#10B981' }]}
                     onPress={() => {
                       if (generatedCampaign) {
                         onSave(generatedCampaign, aiOutput);
@@ -484,7 +613,7 @@ function NewCampaignModal({
                       resetForm();
                     }}
                   >
-                    <Text style={styles.chatCloseButtonText}>Done</Text>
+                    <Text style={styles.chatCloseButtonText}>Confirm & Create Campaign</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -1100,31 +1229,69 @@ const styles = StyleSheet.create({
   chatInterface: {
     width: '100%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 16,
-    height: 450,
+    borderRadius: 32,
+    padding: 20,
+    height: 520,
     borderWidth: 1,
     borderColor: '#F1F5F9',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
+    elevation: 8,
   },
   thinkingHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
+    gap: 16,
+  },
+  agentAvatarContainer: {
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  agentPulse: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    borderRadius: 28,
+    backgroundColor: '#FF6B35',
+  },
+  agentAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FF6B35',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#FFF',
+    elevation: 4,
+    shadowColor: "#FF6B35",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  thinkingInfo: {
+    flex: 1,
   },
   thinkingStatus: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
     color: '#1E293B',
+    marginBottom: 4,
   },
-  pulseCircle: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#E2E8F0',
+  activeStepContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  pulseActive: {
-    backgroundColor: '#FF6B35',
+  activeStepLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
   },
   chatScroll: {
     flex: 1,
@@ -1133,28 +1300,46 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   aiBubble: {
-    backgroundColor: '#F1F5F9',
-    padding: 16,
-    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
+    padding: 20,
+    borderRadius: 24,
     borderTopLeftRadius: 4,
-    maxWidth: '90%',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  aiBubbleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  aiBubbleTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#94A3B8',
+    letterSpacing: 1.5,
   },
   aiBubbleText: {
     color: '#334155',
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 24,
+    fontWeight: '400',
   },
   chatCloseButton: {
-    marginTop: 12,
-    backgroundColor: '#FF6B35',
-    paddingVertical: 12,
-    borderRadius: 12,
+    marginTop: 20,
+    paddingVertical: 18,
+    borderRadius: 16,
     alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 2,
   },
   chatCloseButtonText: {
     color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
+    fontWeight: '800',
+    fontSize: 17,
   },
   ghostButton: {
     paddingVertical: 12,
@@ -1164,5 +1349,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#94A3B8',
     fontWeight: '600',
+  },
+  dotsContainer: {
+    flexDirection: 'row',
+    gap: 4,
+    paddingVertical: 8,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FF6B35',
+  },
+  progressBarBg: {
+    height: 4,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 2,
+    marginBottom: 20,
+    width: '100%',
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#FF6B35',
+    borderRadius: 2,
   },
 });
