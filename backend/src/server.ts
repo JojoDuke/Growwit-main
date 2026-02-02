@@ -29,30 +29,43 @@ app.post('/api/generate-campaign', async (req, res) => {
 
     try {
         const strategist = mastra.getAgent('strategist');
+        const writer = mastra.getAgent('writer');
+        const cadence = mastra.getAgent('cadenceAgent');
 
         // Set headers for SSE (Server-Sent Events) or raw streaming
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Transfer-Encoding', 'chunked');
 
-        const prompt = `Perform a deep research and scout the best subreddits for:
+        const strategistPrompt = `Perform a deep research and scout the best subreddits for:
 Product Name: ${productName}
 Description: ${productDescription}
 Goal: ${userGoal}
 
 Identify 3-5 subreddits, verify their rules, and define a native framing strategy.`;
 
-        console.log(`🔍 [Test Mode] Running Strategist for: ${productName}`);
+        console.log(`🔍 [Campaign] Starting generation for: ${productName}`);
 
-        const strategistResult = await strategist.generate(prompt);
-        const strategyText = strategistResult.text;
+        // STEP 1: Scouting
+        res.write('[STEP:1]\n');
+        console.log('Step 1: Scouting...');
 
-        // Stream Strategist output first
-        res.write(strategyText);
+        let strategyText = '';
+        const strategistStream = await strategist.stream(strategistPrompt);
 
-        res.write('\n\n--- 🤖 HANDING OFF TO WRITER AGENT ---\n\n');
-        console.log(`📝 [Test Mode] Running Writer...`);
+        for await (const chunk of (strategistStream as any).textStream) {
+            res.write(chunk);
+            strategyText += chunk;
 
-        const writer = mastra.getAgent('writer');
+            // Heuristic for Step 2: Once we have some text, we're likely analyzing it
+            if (strategyText.length > 500 && !strategyText.includes('[STEP:2]')) {
+                // res.write('\n[STEP:2]\n'); // We'll let the agent output trigger it if possible, or just send it here
+            }
+        }
+
+        // STEP 3: Verifying rules + STEP 4: Drafting
+        res.write('\n\n[STEP:3]\n\n');
+        res.write('--- 🤖 HANDING OFF TO WRITER AGENT ---\n\n');
+        console.log('Step 3/4: Writing...');
 
         const writerPrompt = `
         Here is the strategy research provided by Agent A. 
@@ -65,18 +78,25 @@ Identify 3-5 subreddits, verify their rules, and define a native framing strateg
         - Generate a specific post for EACH subreddit recommended above.
         - STRICTLY follow the "Rules Constraints" and "Safety Rating" provided for each.
         - Use the specific "Framing Strategy" suggested.
+        - Start by saying you are performing a safety check.
         `;
 
-        const writerResult = await writer.generate(writerPrompt);
-        const writerText = writerResult.text;
+        let writerText = '';
+        const writerStream = await writer.stream(writerPrompt);
 
-        // Stream Writer output
-        res.write(writerText);
+        for await (const chunk of (writerStream as any).textStream) {
+            res.write(chunk);
+            writerText += chunk;
 
-        res.write('\n\n--- 🤖 HANDING OFF TO CADENCE AGENT ---\n\n');
-        console.log(`📝 [Test Mode] Running Cadence...`);
+            if (writerText.includes('**Title:**') && !writerText.includes('[STEP:4]')) {
+                res.write('\n[STEP:4]\n');
+            }
+        }
 
-        const cadence = mastra.getAgent('cadenceAgent');
+        // STEP 5: Finalizing Cadence
+        res.write('\n\n[STEP:5]\n\n');
+        res.write('--- 🤖 HANDING OFF TO CADENCE AGENT ---\n\n');
+        console.log('Step 5: Scheduling...');
 
         const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
         const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -102,8 +122,7 @@ Identify 3-5 subreddits, verify their rules, and define a native framing strateg
 
         const cadenceResult = await cadence.stream(cadencePrompt);
 
-        for await (const chunk of cadenceResult.textStream) {
-            process.stdout.write(chunk);
+        for await (const chunk of (cadenceResult as any).textStream) {
             res.write(chunk);
         }
 
@@ -115,6 +134,7 @@ Identify 3-5 subreddits, verify their rules, and define a native framing strateg
         if (!res.headersSent) {
             res.status(500).json({ error: error.message || 'Internal Server Error' });
         } else {
+            res.write(`\n\n[ERROR]: ${error.message}`);
             res.end();
         }
     }

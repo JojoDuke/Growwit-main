@@ -11,6 +11,7 @@ import {
     UIManager,
     SafeAreaView,
     TextInput,
+    Easing,
 } from 'react-native';
 import {
     Bot,
@@ -24,6 +25,7 @@ import {
     Play,
     RotateCcw,
     Plus,
+    ChevronDown,
 } from "lucide-react-native";
 import { useRouter } from 'expo-router';
 
@@ -35,16 +37,232 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 
 // Minimal components for the playground
-const ThinkingIndicator = () => {
+const ThinkingIndicator = ({ label, stepIndex }: { label?: string, stepIndex: number }) => {
+    const spinValue = useRef(new Animated.Value(0)).current;
+    const substepOpacity = useRef(new Animated.Value(0)).current;
+    const [substepIndex, setSubstepIndex] = useState(0);
+
+    const allSubsteps = [
+        ["Searching for relevant subreddits based on your core niche.", "Identifying communities with high engagement and active daily discussions."],
+        ["Decoding the unique language and 'vibe' of each community.", "Understanding common pain points and what users are actually looking for."],
+        ["Deep-scanning community rules to ensure zero policy violations.", "Checking moderation history to avoid being flagged as promotional."],
+        ["Architecting posts that sound like a real community member, not an AI.", "Refining drafts to match your specific narrative voice and tone."],
+        ["Calculating the exact peak hours for maximum visibility.", "Staggering posts to maintain a natural, human-like activity pattern."]
+    ];
+
+    const currentSubsteps = allSubsteps[Math.max(0, Math.min(stepIndex - 1, 4))];
+
+    useEffect(() => {
+        const startSpinning = () => {
+            spinValue.setValue(0);
+            Animated.timing(spinValue, {
+                toValue: 1,
+                duration: 2000,
+                easing: Easing.linear,
+                useNativeDriver: true,
+            }).start(() => startSpinning());
+        };
+        startSpinning();
+    }, []);
+
+    useEffect(() => {
+        let isMounted = true;
+        const cycleSubsteps = async () => {
+            while (isMounted) {
+                // Fade out
+                await new Promise(r => Animated.timing(substepOpacity, { toValue: 0, duration: 800, useNativeDriver: true }).start(r));
+                if (!isMounted) break;
+
+                setSubstepIndex(prev => (prev + 1) % currentSubsteps.length);
+
+                // Fade in
+                await new Promise(r => Animated.timing(substepOpacity, { toValue: 1, duration: 800, useNativeDriver: true }).start(r));
+                await new Promise(r => setTimeout(r, 3000));
+            }
+        };
+
+        cycleSubsteps();
+        return () => { isMounted = false; };
+    }, [stepIndex]);
+
+    const spin = spinValue.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '360deg'],
+    });
+
     return (
-        <View>
-            <Text style={styles.thinkingLabel}>Thinking...</Text>
+        <View style={styles.thinkingWrapper}>
+            <View style={styles.thinkingContainer}>
+                <Animated.View style={[styles.spinner, { transform: [{ rotate: spin }] }]} />
+                <Text style={styles.thinkingLabel}>{label || "Thinking..."}</Text>
+            </View>
+            <Animated.View style={{ opacity: substepOpacity, marginTop: 12 }}>
+                <Text style={styles.substepText}>{currentSubsteps[substepIndex]}</Text>
+            </Animated.View>
+        </View>
+    );
+};
+
+const CollapsibleThought = ({ title, content }: { title: string, content: string }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    return (
+        <View style={styles.thoughtContainer}>
+            <TouchableOpacity
+                style={styles.thoughtHeader}
+                onPress={() => {
+                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                    setIsOpen(!isOpen);
+                }}
+                activeOpacity={0.7}
+            >
+                <View style={styles.thoughtLeft}>
+                    <Text style={styles.thoughtTitle}>{title}</Text>
+                </View>
+                <ChevronDown size={18} color="#94A3B8" style={{ transform: [{ rotate: isOpen ? '180deg' : '0deg' }] }} />
+            </TouchableOpacity>
+            {isOpen && (
+                <View style={styles.thoughtBody}>
+                    <ScrollView
+                        nestedScrollEnabled={true}
+                        showsVerticalScrollIndicator={true}
+                        style={{ maxHeight: 350 }}
+                    >
+                        <FormattedOutput text={content} isInsideCollapse />
+                    </ScrollView>
+                </View>
+            )}
+        </View>
+    );
+};
+
+const FormattedOutput = ({ text, isInsideCollapse = false }: { text: string, isInsideCollapse?: boolean }) => {
+    // Split by handoffs to group by agent
+    const parts = text.split(/(--- 🤖 HANDING OFF TO .*? ---)/g);
+
+    const renderBlock = (content: string, index: number) => {
+        // Step 1: Aggressive word rejoining. 
+        // We look for any newline that is NOT followed by another newline 
+        // (optionally with some spaces) and replace it with a space.
+        const normalized = content
+            .replace(/\r/g, '') // Clean carriage returns
+            .replace(/([^\n])\n([^\n])/g, '$1 $2') // Pass 1: standard join
+            .replace(/([^\n])\n([^\n])/g, '$1 $2') // Pass 2: catch overlaps
+            .replace(/\s+\n/g, '\n') // Clean trailing spaces before newlines
+            .replace(/\n\s+/g, '\n') // Clean leading spaces after newlines
+            .trim();
+
+        // Legitimate paragraphs are separated by double newlines or more
+        const blocks = normalized.split(/\n\n+/);
+
+        return (
+            <View key={index} style={styles.contentBlock}>
+                {blocks.map((block, bIdx) => {
+                    const trimmed = block.trim();
+                    if (!trimmed) return null;
+
+                    // Headers
+                    if (trimmed.startsWith('## ') || trimmed.startsWith('### ')) {
+                        const hText = trimmed.replace(/^#+\s*/, '').replace(/\*/g, '').trim();
+                        return <Text key={`h-${bIdx}`} style={trimmed.startsWith('## ') ? styles.h2 : styles.h3}>{hText}</Text>;
+                    }
+
+                    // Flexible Label Detection
+                    const labelPattern = /^\**([a-zA-Z\s]{2,20}):\**\s*(.*)/is;
+                    const match = trimmed.match(labelPattern);
+
+                    if (match) {
+                        const label = match[1].trim();
+                        // Also cleanup the value specifically
+                        const value = match[2].trim().replace(/\*\*/g, '').replace(/\n+/g, ' ');
+
+                        return (
+                            <View key={`l-${bIdx}`} style={styles.labelItem}>
+                                <Text style={styles.boldLabel}>{label}:</Text>
+                                {value ? (
+                                    <Text style={styles.labelText}>{value}</Text>
+                                ) : null}
+                            </View>
+                        );
+                    }
+
+                    // Bullet points
+                    if (trimmed.startsWith('- ') || trimmed.startsWith('• ') || trimmed.startsWith('* ')) {
+                        const bText = trimmed.replace(/^[-•*]\s*/, '').replace(/\n+/g, ' ').trim();
+                        return (
+                            <View key={`b-${bIdx}`} style={styles.bulletRow}>
+                                <Text style={styles.bullet}>•</Text>
+                                <Text style={styles.bulletText}>{bText}</Text>
+                            </View>
+                        );
+                    }
+
+                    // Standard Text (Heal any remaining internal newlines)
+                    const cleanedBlock = trimmed.replace(/\n+/g, ' ');
+                    return (
+                        <Text key={`p-${bIdx}`} style={isInsideCollapse ? styles.thoughtText : styles.paragraphLine}>
+                            {cleanedBlock}
+                        </Text>
+                    );
+                })}
+            </View>
+        );
+    };
+
+    if (isInsideCollapse) {
+        return <View>{renderBlock(text, 0)}</View>;
+    }
+
+    return (
+        <View style={styles.formattedContainer}>
+            {parts.map((part, index) => {
+                const trimmedPart = part.trim();
+                if (!trimmedPart) return null;
+
+                const isHandoff = trimmedPart.includes('--- 🤖 HANDING OFF TO');
+
+                if (index === 0) {
+                    // Always collapse the primary research phase
+                    return <CollapsibleThought key={index} title="Phase 1: Strategist Agent" content={trimmedPart} />;
+                }
+
+                if (isHandoff) return null; // Markers are handled by the logic below
+
+                // Identify previous marker for context
+                const prevMarker = parts[index - 1] || "";
+
+                if (prevMarker.includes('WRITER')) {
+                    return (
+                        <View key={index} style={styles.resultContainer}>
+                            <View style={styles.sectionHeaderRow}>
+                                <Zap size={18} color="#FF6B35" />
+                                <Text style={styles.sectionHeaderText}>Campaign Drafts</Text>
+                            </View>
+                            {renderBlock(trimmedPart, index)}
+                        </View>
+                    );
+                }
+
+                if (prevMarker.includes('CADENCE')) {
+                    return (
+                        <View key={index} style={styles.resultContainer}>
+                            <View style={styles.sectionHeaderRow}>
+                                <Clock size={18} color="#10B981" />
+                                <Text style={styles.sectionHeaderText}>Scheduling Profile</Text>
+                            </View>
+                            {renderBlock(trimmedPart, index)}
+                        </View>
+                    );
+                }
+
+                return renderBlock(trimmedPart, index);
+            })}
         </View>
     );
 };
 
 export default function AgentPlayground() {
-    const router = useRouter();
+    const playgroundRouter = useRouter();
     const [currentStep, setCurrentStep] = useState(0);
     const [aiOutput, setAiOutput] = useState("");
     const [isSimulating, setIsSimulating] = useState(false);
@@ -64,11 +282,11 @@ export default function AgentPlayground() {
     const thinkingOpacity = useRef(new Animated.Value(0)).current;
 
     const mockSteps = [
-        { title: "Analyzing Product", output: "Checking niches for your product..." },
-        { title: "Scouting Subreddits", output: "\n\nFound high activity in target niches." },
-        { title: "Verifying Rules", output: "\n\nScanned community guidelines for safety." },
-        { title: "Drafting Content", output: "\n\nWriting native posts in your voice..." },
-        { title: "Finalizing Cadence", output: "\n\nOptimal windows calculated." },
+        { title: "Scouting target communities...", output: "Checking niches for your product..." },
+        { title: "Analyzing local sentiment...", output: "\n\nFound high activity in target niches." },
+        { title: "Verifying safety guidelines...", output: "\n\nScanned community guidelines for safety." },
+        { title: "Generating native drafts...", output: "\n\nWriting native posts in your voice..." },
+        { title: "Architecting post schedule...", output: "\n\nOptimal windows calculated." },
     ];
 
     const startSimulation = async () => {
@@ -85,19 +303,59 @@ export default function AgentPlayground() {
         setCurrentStep(1);
         setAiOutput("");
 
-        for (let i = 0; i < mockSteps.length; i++) {
-            await new Promise(r => setTimeout(r, 1000));
+        try {
+            // Use the same backend URL as the main app
+            const response = await fetch('http://localhost:3001/api/generate-campaign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    productName: name || "Test Product",
+                    productDescription: product || "Test Description",
+                    userGoal: goal || "discussion",
+                }),
+            });
 
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            setCurrentStep(i + 1);
+            if (!response.ok) throw new Error('Failed to generate campaign');
 
-            const fullNewText = mockSteps[i].output;
-            for (let j = 0; j < fullNewText.length; j++) {
-                setAiOutput(prev => prev + fullNewText[j]);
-                await new Promise(r => setTimeout(r, 15));
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder('utf-8');
+
+            if (reader) {
+                let accumulatedText = "";
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    accumulatedText += chunk;
+
+                    // Parse steps from markers to update the UI progress.
+                    // Use a regex that scans the whole accumulated string for the latest step marker
+                    const allSteps = [...accumulatedText.matchAll(/\[STEP:(\d)\]/g)];
+                    if (allSteps.length > 0) {
+                        const lastStep = allSteps[allSteps.length - 1][1];
+                        const stepNum = parseInt(lastStep);
+                        if (stepNum > currentStep) {
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            setCurrentStep(stepNum);
+                        }
+                    } else if (currentStep === 1 && accumulatedText.length > 800) {
+                        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                        setCurrentStep(2);
+                    }
+                }
+
+                // Only set the AI output once everything is loaded
+                const finalCleanOutput = accumulatedText.replace(/\[STEP:\d\]/g, "").trim();
+                setAiOutput(finalCleanOutput);
             }
+        } catch (error) {
+            console.error('Simulation Error:', error);
+            setAiOutput("Error: Failed to connect to the Growwit engine. Make sure the backend is running.");
+        } finally {
+            setIsSimulating(false);
+            setCurrentStep(mockSteps.length + 1); // Mark as complete
         }
-        setIsSimulating(false);
     };
 
     const reset = () => {
@@ -126,10 +384,16 @@ export default function AgentPlayground() {
         }
     };
 
+    const getStepTitle = () => {
+        if (currentStep === 0) return "";
+        if (currentStep > mockSteps.length) return "Campaign Strategy Ready";
+        return mockSteps[currentStep - 1].title;
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <TouchableOpacity onPress={() => playgroundRouter.back()} style={styles.backButton}>
                     <ArrowLeft size={24} color="#1E293B" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>UI Lab</Text>
@@ -138,7 +402,10 @@ export default function AgentPlayground() {
                 </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView
+                ref={scrollRef}
+                contentContainerStyle={[styles.content, currentStep > 0 && { flex: 1 }]}
+            >
                 {currentStep === 0 ? (
                     <Animated.View style={[styles.formSection, { opacity: formAnim, transform: [{ translateY: formY }] }]}>
                         <View style={styles.instructionCard}>
@@ -206,7 +473,30 @@ export default function AgentPlayground() {
                     </Animated.View>
                 ) : (
                     <View style={styles.prototypeContainer}>
-                        <ThinkingIndicator />
+                        {isSimulating ? (
+                            <ThinkingIndicator
+                                label={getStepTitle()}
+                                stepIndex={currentStep}
+                            />
+                        ) : (
+                            <View>
+                                <View style={styles.headerRow}>
+                                    <Sparkles size={24} color="#FF6B35" />
+                                    <Text style={styles.finalTitle}>Campaign Strategy Ready</Text>
+                                </View>
+
+                                <ScrollView style={[styles.chatScroll, { marginTop: 12 }]} showsVerticalScrollIndicator={false}>
+                                    <FormattedOutput text={aiOutput} />
+
+                                    <TouchableOpacity
+                                        style={styles.confirmButton}
+                                        onPress={reset}
+                                    >
+                                        <Text style={styles.confirmButtonText}>Create Another</Text>
+                                    </TouchableOpacity>
+                                </ScrollView>
+                            </View>
+                        )}
                     </View>
                 )}
             </ScrollView>
@@ -383,13 +673,48 @@ const styles = StyleSheet.create({
     prototypeContainer: {
         width: '100%',
         paddingTop: 40,
+        flex: 1,
+    },
+    thinkingWrapper: {
+        width: '100%',
+    },
+    thinkingContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    spinner: {
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        borderWidth: 2,
+        borderColor: '#FF6B35',
+        borderStyle: 'dashed',
     },
     thinkingLabel: {
         fontSize: 22,
-        fontWeight: '400',
-        fontFamily: 'Geist',
+        fontWeight: '700',
+        fontFamily: 'Geist-Bold',
         color: '#FF6B35',
         letterSpacing: -0.5,
+    },
+    substepText: {
+        fontSize: 16,
+        color: '#64748B',
+        fontFamily: 'Geist',
+        lineHeight: 24,
+    },
+    headerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginBottom: 8,
+    },
+    finalTitle: {
+        fontSize: 20,
+        fontWeight: '800',
+        fontFamily: 'Geist-Bold',
+        color: '#1E293B',
     },
     chatScroll: {
         flex: 1,
@@ -404,22 +729,159 @@ const styles = StyleSheet.create({
     },
     aiBubbleText: {
         color: '#334155',
-        fontSize: 17,
-        lineHeight: 28,
+        fontSize: 16,
+        lineHeight: 26,
         fontFamily: 'Geist',
         fontWeight: '400',
+    },
+    // Formatted Output Styles
+    formattedContainer: {
+        width: '100%',
+    },
+    contentBlock: {
+        marginBottom: 16,
+    },
+    h2: {
+        fontSize: 19,
+        fontWeight: '800',
+        fontFamily: 'Geist-Bold',
+        color: '#1E293B',
+        marginTop: 16,
+        marginBottom: 8,
+    },
+    h3: {
+        fontSize: 17,
+        fontWeight: '700',
+        fontFamily: 'Geist-SemiBold',
+        color: '#475569',
+        marginTop: 12,
+        marginBottom: 4,
+    },
+    labelRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        marginBottom: 4,
+    },
+    labelItem: {
+        marginBottom: 8,
+    },
+    boldLabel: {
+        fontWeight: '800',
+        fontFamily: 'Geist-Bold',
+        color: '#1E293B',
+        fontSize: 16,
+        marginBottom: 2,
+    },
+    labelText: {
+        fontSize: 16,
+        lineHeight: 24,
+        color: '#475569',
+    },
+    paragraphLine: {
+        fontSize: 16,
+        lineHeight: 24,
+        color: '#475569',
+        marginBottom: 8,
+    },
+    bulletRow: {
+        flexDirection: 'row',
+        paddingLeft: 8,
+        marginBottom: 6,
+    },
+    bullet: {
+        fontSize: 18,
+        color: '#FF6B35',
+        marginRight: 8,
+    },
+    bulletText: {
+        fontSize: 15,
+        lineHeight: 22,
+        color: '#475569',
+        flex: 1,
+    },
+    resultContainer: {
+        marginTop: 16,
+        marginBottom: 16,
+        padding: 16,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    sectionHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+        paddingBottom: 8,
+    },
+    sectionHeaderText: {
+        fontSize: 16,
+        fontWeight: '800',
+        fontFamily: 'Geist-Bold',
+        color: '#1E293B',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    // Thought Styles
+    thoughtContainer: {
+        backgroundColor: '#F1F5F9',
+        borderRadius: 12,
+        marginBottom: 12,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
+    thoughtHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+    },
+    thoughtLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    thoughtTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#64748B',
+    },
+    thoughtBody: {
+        paddingHorizontal: 12,
+        paddingBottom: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#E2E8F0',
+        paddingTop: 10,
+        height: 'auto',
+    },
+    thoughtText: {
+        fontSize: 13,
+        color: '#64748B',
+        fontStyle: 'italic',
+        lineHeight: 18,
     },
     confirmButton: {
         marginTop: 20,
         paddingVertical: 18,
         borderRadius: 16,
-        backgroundColor: '#10B981',
+        backgroundColor: '#FF6B35',
         alignItems: 'center',
-        shadowColor: "#000",
+        shadowColor: "#FF6B35",
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.2,
         shadowRadius: 10,
         elevation: 2,
+        marginBottom: 40,
     },
     resetButtonText: {
         color: '#64748B',
