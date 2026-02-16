@@ -26,6 +26,7 @@ import {
     RotateCcw,
     Plus,
     ChevronDown,
+    Copy,
 } from "lucide-react-native";
 import { useRouter } from 'expo-router';
 
@@ -136,6 +137,33 @@ const CollapsibleThought = ({ title, content }: { title: string, content: string
     );
 };
 
+const DraftCard = ({ title, content, subreddit }: { title: string, content: string, subreddit?: string }) => {
+    return (
+        <View style={styles.draftCard}>
+            <View style={styles.draftCardSubredditRow}>
+                <View style={styles.subredditBadge}>
+                    <Text style={styles.subredditBadgeText}>r/{subreddit || "community"}</Text>
+                </View>
+                <View style={styles.draftCardActions}>
+                    <TouchableOpacity style={styles.draftActionButton}>
+                        <Copy size={14} color="#64748B" />
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+            <View style={styles.draftField}>
+                <Text style={styles.draftLabel}>TITLE</Text>
+                <Text style={styles.draftValue}>{title}</Text>
+            </View>
+
+            <View style={styles.draftField}>
+                <Text style={styles.draftLabel}>BODY</Text>
+                <Text style={styles.draftValue} numberOfLines={5}>{content}</Text>
+            </View>
+        </View>
+    );
+};
+
 const FormattedOutput = ({ text, isInsideCollapse = false }: { text: string, isInsideCollapse?: boolean }) => {
     // Split by handoffs to group by agent
     const parts = text.split(/(--- 🤖 HANDING OFF TO .*? ---)/g);
@@ -232,13 +260,26 @@ const FormattedOutput = ({ text, isInsideCollapse = false }: { text: string, isI
                 const prevMarker = parts[index - 1] || "";
 
                 if (prevMarker.includes('WRITER')) {
+                    // Quick regex to pull title/body from the mock for the "one card" preview
+                    const subMatch = trimmedPart.match(/## 📍 r\/(.*)\n/);
+                    const titleMatch = trimmedPart.match(/\*\*Title:\*\* (.*)/);
+                    const bodyMatch = trimmedPart.match(/\*\*Body:\*\* ([\s\S]*?)(?=\n\n##|$)/);
+
+                    const sub = subMatch ? subMatch[1] : "subreddit";
+                    const title = titleMatch ? titleMatch[1] : "Draft Title";
+                    const body = bodyMatch ? bodyMatch[1].trim() : "Draft Body";
+
                     return (
                         <View key={index} style={styles.resultContainer}>
                             <View style={styles.sectionHeaderRow}>
                                 <Zap size={18} color="#FF6B35" />
                                 <Text style={styles.sectionHeaderText}>Campaign Drafts</Text>
                             </View>
-                            {renderBlock(trimmedPart, index)}
+                            <DraftCard
+                                subreddit={sub}
+                                title={title}
+                                content={body}
+                            />
                         </View>
                     );
                 }
@@ -276,6 +317,7 @@ export default function AgentPlayground() {
     const [accountKarma, setAccountKarma] = useState("");
     const [accountName, setAccountName] = useState("");
     const [accounts, setAccounts] = useState<string[]>([]);
+    const [postsPerMonth, setPostsPerMonth] = useState("30");
 
     const formAnim = useRef(new Animated.Value(1)).current;
     const formY = useRef(new Animated.Value(0)).current;
@@ -304,57 +346,73 @@ export default function AgentPlayground() {
         setAiOutput("");
 
         try {
-            // Use the same backend URL as the main app
-            const response = await fetch('http://localhost:3001/api/generate-campaign', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    productName: name || "Test Product",
-                    productDescription: product || "Test Description",
-                    userGoal: goal || "discussion",
-                }),
-            });
+            const mockResponse = `[STEP:1]
+## 🚀 Strategy: Native Community Growth
+I've analyzed your product and identified 3 key communities where your target audience lives.
 
-            if (!response.ok) throw new Error('Failed to generate campaign');
+### Target Subreddits:
+- r/softwareengineering: Focus on productivity and meal prep for devs.
+- r/productivity: Pivot to "brain-fuel" and focus on zero-friction.
+- r/mealprep: Emphasize the nutritional data for the "logic-driven" user.
 
-            const reader = response.body?.getReader();
-            const decoder = new TextDecoder('utf-8');
+[STEP:2]
+I'm now identifying common pain points. User sentiment suggests a strong desire for "macros-first" planning without the visual clutter of traditional apps. We will frame Zest AI as a "CLI for your kitchen".
 
-            if (reader) {
-                let accumulatedText = "";
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
+--- 🤖 HANDING OFF TO WRITER AGENT ---
 
-                    const chunk = decoder.decode(value, { stream: true });
-                    accumulatedText += chunk;
+[STEP:3]
+I am performing a safety check against subreddit-specific rules...
+- r/softwareengineering: Avoid direct promo. Focus on "Show & Tell".
+- r/productivity: Rules allow "Weekly Tool" discussions.
+Checks passed. Generating native drafts...
 
-                    // Parse steps from markers to update the UI progress.
-                    // Use a regex that scans the whole accumulated string for the latest step marker
-                    const allSteps = [...accumulatedText.matchAll(/\[STEP:(\d)\]/g)];
-                    if (allSteps.length > 0) {
-                        const lastStep = allSteps[allSteps.length - 1][1];
-                        const stepNum = parseInt(lastStep);
-                        if (stepNum > currentStep) {
-                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                            setCurrentStep(stepNum);
-                        }
-                    } else if (currentStep === 1 && accumulatedText.length > 800) {
+[STEP:4]
+## 📍 r/softwareengineering
+**Title:** I built a meal planner for my own dev burnout, looking for feedback
+**Body:** Hey everyone, I've been struggling with balancing sprints and eating actual food. I built a small tool that hooks into my calendar and just gives me a grocery list based on my macros. No ads, no fluff. Looking for 5 people who want to break it...
+
+## 📍 r/productivity
+**Title:** The "Zero Decision" meal strategy for deep work
+**Body:** Most planners take too much time to manage. I'm testing an AI that does the planning for you so you can stay in flow state. If you hate tracking calories but want the results, check this out.
+
+--- 🤖 HANDING OFF TO CADENCE AGENT ---
+
+[STEP:5]
+Optimal posting windows calculated in UTC:
+- r/softwareengineering: Tuesday 2:00 PM (Peak dev break time)
+- r/productivity: Monday 9:00 AM (Start of week planning)
+- r/mealprep: Sunday 4:00 PM (Preparation window)`;
+
+            let accumulatedText = "";
+            const chunks = mockResponse.split("\n");
+
+            for (const chunk of chunks) {
+                // Simulate network/thinking delay
+                await new Promise(r => setTimeout(r, 600));
+
+                accumulatedText += chunk + "\n";
+
+                // Update current step based on markers
+                const allSteps = [...accumulatedText.matchAll(/\[STEP:(\d)\]/g)];
+                if (allSteps.length > 0) {
+                    const lastStep = allSteps[allSteps.length - 1][1];
+                    const stepNum = parseInt(lastStep);
+                    if (stepNum > currentStep) {
                         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                        setCurrentStep(2);
+                        setCurrentStep(stepNum);
                     }
                 }
-
-                // Only set the AI output once everything is loaded
-                const finalCleanOutput = accumulatedText.replace(/\[STEP:\d\]/g, "").trim();
-                setAiOutput(finalCleanOutput);
             }
+
+            const finalCleanOutput = accumulatedText.replace(/\[STEP:\d\]/g, "").trim();
+            setAiOutput(finalCleanOutput);
+
         } catch (error) {
             console.error('Simulation Error:', error);
-            setAiOutput("Error: Failed to connect to the Growwit engine. Make sure the backend is running.");
+            setAiOutput("Error: Simulator encountered an issue.");
         } finally {
             setIsSimulating(false);
-            setCurrentStep(mockSteps.length + 1); // Mark as complete
+            setCurrentStep(6); // Mark as complete
         }
     };
 
@@ -433,7 +491,7 @@ export default function AgentPlayground() {
 
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Product/Service</Text>
-                            <TextInput style={[styles.input, styles.textArea]} value={product} onChangeText={setProduct} multiline numberOfLines={3} placeholder="What are you promoting?" />
+                            <TextInput style={[styles.input, styles.textArea]} value={product} onChangeText={setProduct} multiline numberOfLines={3} placeholder="What are you promoting? Be as detailed as possible" />
                         </View>
 
                         <View style={styles.formGroup}>
@@ -456,6 +514,21 @@ export default function AgentPlayground() {
                                 <Text style={styles.label}>Karma</Text>
                                 <TextInput style={styles.input} value={accountKarma} onChangeText={setAccountKarma} keyboardType="number-pad" placeholder="500" />
                             </View>
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Monthly Post Goal (Max 100)</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={postsPerMonth}
+                                onChangeText={(val) => {
+                                    const num = parseInt(val) || 0;
+                                    if (num <= 100) setPostsPerMonth(val);
+                                    else setPostsPerMonth("100");
+                                }}
+                                keyboardType="number-pad"
+                                placeholder="30"
+                            />
                         </View>
 
                         <View style={styles.formGroup}>
@@ -492,7 +565,6 @@ export default function AgentPlayground() {
                         ) : (
                             <View>
                                 <View style={styles.headerRow}>
-                                    <Sparkles size={24} color="#FF6B35" />
                                     <Text style={styles.finalTitle}>Campaign Strategy Ready</Text>
                                 </View>
 
@@ -898,5 +970,65 @@ const styles = StyleSheet.create({
         color: '#64748B',
         fontSize: 16,
         fontWeight: '600',
+    },
+    // Draft Card Styles
+    draftCard: {
+        backgroundColor: '#F8FAFC',
+        borderRadius: 14,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        marginBottom: 12,
+    },
+    draftCardSubredditRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    subredditBadge: {
+        backgroundColor: '#FFF1ED',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#FF6B3520',
+    },
+    subredditBadgeText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#FF6B35',
+        fontFamily: 'Geist-Bold',
+    },
+    draftCardActions: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    draftActionButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        backgroundColor: '#FFF',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    draftField: {
+        marginBottom: 12,
+    },
+    draftLabel: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: '#94A3B8',
+        letterSpacing: 1,
+        marginBottom: 4,
+        fontFamily: 'Geist-Bold',
+    },
+    draftValue: {
+        fontSize: 15,
+        color: '#1E293B',
+        lineHeight: 22,
+        fontFamily: 'Geist',
     },
 });

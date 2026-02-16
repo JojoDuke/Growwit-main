@@ -204,7 +204,7 @@ export default function HomeScreen() {
         onClose={() => setShowNewCampaignModal(false)}
         onGenerate={async (campaign, onStreamChunk) => {
           let fullOutput = "";
-          const response = await fetch('http://localhost:3001/api/generate-campaign', {
+          const response = await fetch('http://192.168.0.91:3001/api/generate-campaign', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -532,7 +532,7 @@ function NewCampaignModal({
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Product/Service</Text>
-              <TextInput style={[styles.input, styles.textArea]} value={product} onChangeText={setProduct} multiline numberOfLines={3} placeholder="What are you promoting?" />
+              <TextInput style={[styles.input, styles.textArea]} value={product} onChangeText={setProduct} multiline numberOfLines={3} placeholder="What are you promoting? Be as detailed as possible" />
             </View>
 
             <View style={styles.formGroup}>
@@ -555,6 +555,21 @@ function NewCampaignModal({
                 <Text style={styles.label}>Karma</Text>
                 <TextInput style={styles.input} value={accountKarma} onChangeText={setAccountKarma} keyboardType="number-pad" placeholder="500" />
               </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Monthly Post Goal (Max 100)</Text>
+              <TextInput
+                style={styles.input}
+                value={postsPerMonth}
+                onChangeText={(val) => {
+                  const num = parseInt(val) || 0;
+                  if (num <= 100) setPostsPerMonth(val);
+                  else setPostsPerMonth("100");
+                }}
+                keyboardType="number-pad"
+                placeholder="50"
+              />
             </View>
 
             <View style={styles.formGroup}>
