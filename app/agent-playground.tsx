@@ -393,7 +393,18 @@ export default function AgentPlayground() {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => playgroundRouter.back()} style={styles.backButton}>
+                <TouchableOpacity
+                    onPress={() => {
+                        if (currentStep > 0) {
+                            reset();
+                        } else if (playgroundRouter.canGoBack()) {
+                            playgroundRouter.back();
+                        } else {
+                            playgroundRouter.replace("/");
+                        }
+                    }}
+                    style={styles.backButton}
+                >
                     <ArrowLeft size={24} color="#1E293B" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>UI Lab</Text>

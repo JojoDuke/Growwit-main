@@ -106,7 +106,16 @@ export default function CampaignDetailScreen() {
         <SafeAreaView style={styles.container} edges={["top"]}>
             {/* Custom Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+                <TouchableOpacity
+                    onPress={() => {
+                        if (router.canGoBack()) {
+                            router.back();
+                        } else {
+                            router.replace("/");
+                        }
+                    }}
+                    style={styles.headerButton}
+                >
                     <ChevronLeft size={24} color="#1E293B" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle} numberOfLines={1}>{campaign.name}</Text>
