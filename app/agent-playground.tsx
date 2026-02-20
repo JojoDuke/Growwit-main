@@ -151,6 +151,13 @@ const DraftCard = ({ title, content, subreddit }: { title: string, content: stri
                 </View>
             </View>
 
+            <View style={styles.draftScheduleInfo}>
+                <Text style={styles.draftScheduleLabel}>Scheduled For:</Text>
+                <Text style={styles.draftScheduleValue}>Mon, Feb 24 • 2:00 PM</Text>
+            </View>
+
+            <View style={styles.draftDivider} />
+
             <View style={styles.draftField}>
                 <Text style={styles.draftLabel}>TITLE</Text>
                 <Text style={styles.draftValue}>{title}</Text>
@@ -260,26 +267,28 @@ const FormattedOutput = ({ text, isInsideCollapse = false }: { text: string, isI
                 const prevMarker = parts[index - 1] || "";
 
                 if (prevMarker.includes('WRITER')) {
-                    // Quick regex to pull title/body from the mock for the "one card" preview
-                    const subMatch = trimmedPart.match(/## 📍 r\/(.*)\n/);
-                    const titleMatch = trimmedPart.match(/\*\*Title:\*\* (.*)/);
-                    const bodyMatch = trimmedPart.match(/\*\*Body:\*\* ([\s\S]*?)(?=\n\n##|$)/);
-
-                    const sub = subMatch ? subMatch[1] : "subreddit";
-                    const title = titleMatch ? titleMatch[1] : "Draft Title";
-                    const body = bodyMatch ? bodyMatch[1].trim() : "Draft Body";
+                    // Split the part by subreddit markers to find all drafts
+                    const draftBlocks = trimmedPart.split(/## 📍 r\//g).slice(1);
 
                     return (
                         <View key={index} style={styles.resultContainer}>
                             <View style={styles.sectionHeaderRow}>
-                                <Zap size={18} color="#FF6B35" />
                                 <Text style={styles.sectionHeaderText}>Campaign Drafts</Text>
                             </View>
-                            <DraftCard
-                                subreddit={sub}
-                                title={title}
-                                content={body}
-                            />
+                            {draftBlocks.map((block, bIdx) => {
+                                const sub = block.split('\n')[0].trim();
+                                const titleMatch = block.match(/\*\*Title:\*\* (.*)/);
+                                const bodyMatch = block.match(/\*\*Body:\*\* ([\s\S]*?)(?=\n\n##|$)/);
+
+                                return (
+                                    <DraftCard
+                                        key={bIdx}
+                                        subreddit={sub}
+                                        title={titleMatch ? titleMatch[1] : "Draft Title"}
+                                        content={bodyMatch ? bodyMatch[1].trim() : "Draft Body"}
+                                    />
+                                );
+                            })}
                         </View>
                     );
                 }
@@ -885,25 +894,14 @@ const styles = StyleSheet.create({
     resultContainer: {
         marginTop: 16,
         marginBottom: 16,
-        padding: 16,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
+        paddingHorizontal: 4,
     },
     sectionHeaderRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
         marginBottom: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F1F5F9',
-        paddingBottom: 8,
+        paddingBottom: 4,
     },
     sectionHeaderText: {
         fontSize: 16,
@@ -973,12 +971,17 @@ const styles = StyleSheet.create({
     },
     // Draft Card Styles
     draftCard: {
-        backgroundColor: '#F8FAFC',
+        backgroundColor: '#FFFFFF',
         borderRadius: 14,
         padding: 16,
         borderWidth: 1,
-        borderColor: '#E2E8F0',
+        borderColor: '#F1F5F9',
         marginBottom: 12,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.03,
+        shadowRadius: 4,
+        elevation: 1,
     },
     draftCardSubredditRow: {
         flexDirection: 'row',
@@ -1029,6 +1032,28 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: '#1E293B',
         lineHeight: 22,
+        fontFamily: 'Geist',
+    },
+    draftDivider: {
+        height: 1,
+        backgroundColor: '#E2E8F0',
+        marginVertical: 12,
+    },
+    draftScheduleInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingTop: 4,
+    },
+    draftScheduleLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#64748B',
+        fontFamily: 'Geist-Bold',
+    },
+    draftScheduleValue: {
+        fontSize: 12,
+        color: '#475569',
         fontFamily: 'Geist',
     },
 });
