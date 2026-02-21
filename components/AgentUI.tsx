@@ -108,28 +108,16 @@ export const FormattedOutput = ({
                     const trimmed = block.trim();
                     if (!trimmed) return null;
 
-                    // Filter out research/scheduling junk ONLY in the strategist phase (index 0)
-                    const isResearchJunk = trimmed.includes("Optimal Overall") || trimmed.includes("UTC") || trimmed.includes("Next best window");
-                    if (isResearchJunk && !trimmed.includes("**Title:**")) {
-                        // Check if we are in the research part (not writer)
-                        if (!blocks.some(b => b.includes("## r/"))) {
-                            return null;
-                        }
-                    }
-
                     if (/\[STEP:\d+\]/.test(trimmed)) return null;
 
-                    if (trimmed.startsWith("## ") || trimmed.startsWith("### ")) {
+                    if (trimmed.startsWith("# ") || trimmed.startsWith("## ") || trimmed.startsWith("### ")) {
                         const hText = trimmed
                             .replace(/^#+\s*/, "")
                             .replace(/\*/g, "")
                             .trim();
 
-                        // Skip subreddit headers in strategy part if they lead to research junk
-                        if (hText.startsWith("r/")) return null;
-
                         return (
-                            <Text key={`h-${bIdx}`} style={trimmed.startsWith("## ") ? agentStyles.h2 : agentStyles.h3}>
+                            <Text key={`h-${bIdx}`} style={trimmed.startsWith("# ") ? agentStyles.h1 : trimmed.startsWith("## ") ? agentStyles.h2 : agentStyles.h3}>
                                 {hText}
                             </Text>
                         );
@@ -140,9 +128,6 @@ export const FormattedOutput = ({
 
                     if (match) {
                         const label = match[1].trim();
-                        if (["Optimal Overall", "Success Indicator", "Engagement Velocity Strategy"].includes(label)) {
-                            return null;
-                        }
 
                         const value = match[2]
                             .trim()
@@ -192,50 +177,44 @@ export const FormattedOutput = ({
                 if (!trimmedPart) return null;
 
                 const isHandoff = trimmedPart.includes("--- 🤖 HANDING OFF TO");
-
-                if (index === 0 && !skipInitialThought) {
-                    return <CollapsibleThought key={index} title={title} content={trimmedPart} />;
-                }
-
                 if (isHandoff) return null;
 
-                const prevMarker = parts[index - 1] || "";
+                // Split by draft markers but keep everything
+                const segments = trimmedPart.split(/(?=(?:## |### |📍 )r\/)/g);
 
-                // Improved detection for Drafts
-                if (prevMarker.includes("WRITER") || trimmedPart.includes("**Title:**") || trimmedPart.includes("📍 r/")) {
-                    const draftBlocks = trimmedPart.split(/(?:## |### |📍 )r\//g).slice(1);
+                return (
+                    <View key={index}>
+                        {segments.map((segment, sIdx) => {
+                            const trimmedSegment = segment.trim();
+                            if (!trimmedSegment) return null;
 
-                    if (draftBlocks.length > 0) {
-                        return (
-                            <View key={index} style={agentStyles.resultContainer}>
-                                <View style={agentStyles.sectionHeaderRow}>
-                                    <View style={agentStyles.dot} />
-                                    <Text style={agentStyles.sectionHeaderText}>Campaign Drafts</Text>
-                                </View>
-                                {draftBlocks.map((block, bIdx) => {
-                                    const sub = block.split("\n")[0].trim().replace(/[#*\s:]/g, "");
-                                    const titleMatch = block.match(/\*\*Title:\*\* (.*)/i);
-                                    const bodyMatch = block.match(/\*\*Body:\*\* ([\s\S]*?)(?=\n\n|\n\*\*Scheduled|$)/i);
-                                    const scheduleMatch = block.match(/(?:Scheduled For|Time):\*\*? (.*)/i);
+                            const isDraft = /^(?:## |### |📍 )r\//i.test(trimmedSegment);
 
-                                    if (!bodyMatch && !titleMatch) return null;
+                            if (isDraft) {
+                                const subMatch = trimmedSegment.match(/^(?:## |### |📍 )\s*r\/([^\s\n:*]+)/i);
+                                const sub = subMatch ? subMatch[1] : "community";
 
+                                const titleMatch = trimmedSegment.match(/\*\*Title:\*\* (.*)/i);
+                                const bodyMatch = trimmedSegment.match(/\*\*Body:\*\* ([\s\S]*?)(?=\n\n|\n\*\*|\n---|$)/i);
+                                const scheduleMatch = trimmedSegment.match(/(?:Scheduled For|Time|📅 SCHEDULING).*?:\*\*? (.*)/is);
+
+                                if (bodyMatch || titleMatch) {
                                     return (
                                         <DraftCard
-                                            key={bIdx}
+                                            key={sIdx}
                                             subreddit={sub}
                                             title={titleMatch ? titleMatch[1].trim() : "Draft Title"}
                                             content={bodyMatch ? bodyMatch[1].trim() : "Draft Body"}
                                             scheduledFor={scheduleMatch ? scheduleMatch[1].trim() : undefined}
                                         />
                                     );
-                                })}
-                            </View>
-                        );
-                    }
-                }
+                                }
+                            }
 
-                return renderBlock(trimmedPart, index);
+                            return renderBlock(trimmedSegment, sIdx);
+                        })}
+                    </View>
+                );
             })}
         </View>
     );
@@ -247,6 +226,15 @@ export const agentStyles = StyleSheet.create({
     },
     contentBlock: {
         marginBottom: 20,
+    },
+    h1: {
+        fontSize: 24,
+        fontWeight: "900",
+        color: "#1E293B",
+        marginTop: 24,
+        marginBottom: 12,
+        fontFamily: "Geist-Bold",
+        letterSpacing: -0.5,
     },
     h2: {
         fontSize: 20,

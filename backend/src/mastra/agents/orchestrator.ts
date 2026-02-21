@@ -3,8 +3,6 @@ import { strategist } from "./s1_strategist";
 import { writer } from "./s2_writer";
 import { cadenceAgent } from "./s3_cadence";
 import { MODELS } from "../models";
-import { searchTool } from "../tools/search";
-import { redditPostAnalyzer } from "../tools/reddit-post-analyzer";
 
 export const campaignGenerator = new Agent({
    id: "campaign-generator",
@@ -23,9 +21,11 @@ export const campaignGenerator = new Agent({
      - Maximum 2-3 posts per day across the entire account to avoid being flagged as a spam bot.
   
   HOW TO INTERACT:
-  - Before delegating to a sub-agent, you MUST output a clear status header (e.g., "### 🔍 SCOUTING SUBREDDITS...") so the user sees progress in the stream.
-  - Wait for the sub-agent to finish before summarizing or moving to the next step.
-  - Do not attempt to summarize research until Agent A has fully responded.
+  - You MUST speak to the user in the text stream concurrently with your delegation. 
+  - Before calling a sub-agent tool, output a clear status header (e.g., "### 🔍 SCOUTING SUBREDDITS...") so the user knows what's happening.
+  - After receiving a sub-agent's response, briefly summarize what you found before moving to the next step.
+  - Never finish until you have delivered the final structured markdown report.
+  - Use the exact agent keys: 'strategist', 'cadenceAgent', 'writer'.
   
   WORKFLOW:
   1. START: Output "### 🎯 ANALYZING PRODUCT & GOALS..."
@@ -78,5 +78,4 @@ export const campaignGenerator = new Agent({
   `,
    model: MODELS.ORCHESTRATOR,
    agents: { strategist, writer, cadenceAgent },
-   tools: { searchTool, redditPostAnalyzer },
 });

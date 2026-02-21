@@ -50,12 +50,16 @@ app.post('/api/generate-campaign', async (req, res) => {
 
         const stream = await orchestrator.stream(prompt);
 
+        let fullResponse = '';
         for await (const chunk of (stream as any).textStream) {
+            fullResponse += chunk;
+            process.stdout.write(chunk); // See it in real-time in terminal
             res.write(chunk);
         }
 
         res.end();
-        console.log(`\n✅ Campaign orchestration complete for: ${productName}`);
+        console.log(`\n\n[DEBUG] Full response length: ${fullResponse.length}`);
+        console.log(`✅ Campaign orchestration complete for: ${productName}`);
 
     } catch (error: any) {
         console.error('💥 Error in generate-campaign:', error);
