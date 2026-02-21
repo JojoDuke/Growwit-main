@@ -171,7 +171,17 @@ const DraftCard = ({ title, content, subreddit }: { title: string, content: stri
     );
 };
 
-const FormattedOutput = ({ text, isInsideCollapse = false }: { text: string, isInsideCollapse?: boolean }) => {
+const FormattedOutput = ({
+    text,
+    title = "Phase 1: Strategist Agent",
+    skipInitialThought = false,
+    isInsideCollapse = false
+}: {
+    text: string,
+    title?: string,
+    skipInitialThought?: boolean,
+    isInsideCollapse?: boolean
+}) => {
     // Split by handoffs to group by agent
     const parts = text.split(/(--- 🤖 HANDING OFF TO .*? ---)/g);
 
@@ -255,10 +265,9 @@ const FormattedOutput = ({ text, isInsideCollapse = false }: { text: string, isI
                 if (!trimmedPart) return null;
 
                 const isHandoff = trimmedPart.includes('--- 🤖 HANDING OFF TO');
-
-                if (index === 0) {
-                    // Always collapse the primary research phase
-                    return <CollapsibleThought key={index} title="Phase 1: Strategist Agent" content={trimmedPart} />;
+                if (index === 0 && !skipInitialThought) {
+                    // Always collapse the primary research phase if not skipped
+                    return <CollapsibleThought key={index} title={title} content={trimmedPart} />;
                 }
 
                 if (isHandoff) return null; // Markers are handled by the logic below
@@ -357,12 +366,16 @@ export default function AgentPlayground() {
         try {
             const mockResponse = `[STEP:1]
 ## 🚀 Strategy: Native Community Growth
-I've analyzed your product and identified 3 key communities where your target audience lives.
+I've analyzed your product and identified 5 key communities where your target audience lives.
 
 ### Target Subreddits:
 - r/softwareengineering: Focus on productivity and meal prep for devs.
 - r/productivity: Pivot to "brain-fuel" and focus on zero-friction.
 - r/mealprep: Emphasize the nutritional data for the "logic-driven" user.
+- r/learnprogramming: Focus on "health for learners" angle.
+- r/workfromhome: Target the "home-office lunch" efficiency.
+- r/indiehackers: Focus on "shipping faster with automation".
+- r/biohacking: Framed as "bio-optimized nutrition for high performance".
 
 [STEP:2]
 I'm now identifying common pain points. User sentiment suggests a strong desire for "macros-first" planning without the visual clutter of traditional apps. We will frame Zest AI as a "CLI for your kitchen".
@@ -373,7 +386,7 @@ I'm now identifying common pain points. User sentiment suggests a strong desire 
 I am performing a safety check against subreddit-specific rules...
 - r/softwareengineering: Avoid direct promo. Focus on "Show & Tell".
 - r/productivity: Rules allow "Weekly Tool" discussions.
-Checks passed. Generating native drafts...
+Checks passed. Generating 7 native drafts...
 
 [STEP:4]
 ## 📍 r/softwareengineering
@@ -384,13 +397,37 @@ Checks passed. Generating native drafts...
 **Title:** The "Zero Decision" meal strategy for deep work
 **Body:** Most planners take too much time to manage. I'm testing an AI that does the planning for you so you can stay in flow state. If you hate tracking calories but want the results, check this out.
 
+## 📍 r/mealprep
+**Title:** Why most AI planners fail for engineers (and how I fixed it)
+**Body:** Tired of caloric apps that feel like a second job? I architected Zest to be logic-driven. Input your constraints, get your plan. No photos, no Socials, just data.
+
+## 📍 r/learnprogramming
+**Title:** Staying healthy while learning to code - My free tool
+**Body:** We all know the "coffee and ramen" stereotype. I'm building something to help junior devs actually eat well without sacrificing study time.
+
+## 📍 r/workfromhome
+**Title:** Fixed my messy WFH lunch break with a script
+**Body:** I used to spend 45 mins deciding what to eat. Now my AI tells me what's in the fridge and fits my diet in 5 seconds.
+
+## 📍 r/indiehackers
+**Title:** Stop wasting time on meal prep, I build a tool for that
+**Body:** As founders, every minute counts. I automated the macro-planning part of my life so I can spend more time on dev. Launching the beta soon.
+
+## 📍 r/biohacking
+**Title:** Bio-optimized nutrition planner - No visual overhead
+**Body:** If you're into biohacking, you know tracking is key but tedious. This tool planning purely based on logic and nutrient density. Minimalist UI.
+
 --- 🤖 HANDING OFF TO CADENCE AGENT ---
 
 [STEP:5]
 Optimal posting windows calculated in UTC:
-- r/softwareengineering: Tuesday 2:00 PM (Peak dev break time)
-- r/productivity: Monday 9:00 AM (Start of week planning)
-- r/mealprep: Sunday 4:00 PM (Preparation window)`;
+- r/softwareengineering: Tuesday 2:00 PM
+- r/productivity: Monday 9:00 AM
+- r/mealprep: Sunday 4:00 PM
+- r/learnprogramming: Wednesday 10:00 AM
+- r/workfromhome: Thursday 12:00 PM
+- r/indiehackers: Tuesday 10:00 AM
+- r/biohacking: Friday 8:00 AM`;
 
             let accumulatedText = "";
             const chunks = mockResponse.split("\n");
@@ -572,26 +609,69 @@ Optimal posting windows calculated in UTC:
                                 stepIndex={currentStep}
                             />
                         ) : (
-                            <View>
-                                <View style={styles.headerRow}>
+                            <View style={{ flex: 1 }}>
+                                <View style={[styles.headerRow, { paddingHorizontal: 20 }]}>
                                     <Text style={styles.finalTitle}>Campaign Strategy Ready</Text>
                                 </View>
 
-                                <ScrollView style={[styles.chatScroll, { marginTop: 12 }]} showsVerticalScrollIndicator={false}>
-                                    <FormattedOutput text={aiOutput} />
+                                <ScrollView
+                                    style={[styles.chatScroll, { marginTop: 12 }]}
+                                    showsVerticalScrollIndicator={false}
+                                    stickyHeaderIndices={[1]} // Make Campaign Drafts header sticky
+                                >
+                                    <View style={{ paddingHorizontal: 20 }}>
+                                        <FormattedOutput text={aiOutput.split('--- 🤖 HANDING OFF TO WRITER AGENT ---')[0]} />
+                                    </View>
 
-                                    <TouchableOpacity
-                                        style={styles.confirmButton}
-                                        onPress={reset}
-                                    >
-                                        <Text style={styles.confirmButtonText}>Create Another</Text>
-                                    </TouchableOpacity>
+                                    {/* Sticky Header Section */}
+                                    <View style={styles.stickyHeaderWrapper}>
+                                        <View style={styles.sectionHeaderRow}>
+                                            <Text style={styles.sectionHeaderText}>Campaign Drafts</Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={{ paddingHorizontal: 20 }}>
+                                        {/* Render only the drafts part using DraftCards */}
+                                        {(() => {
+                                            const writerPart = aiOutput.split('--- 🤖 HANDING OFF TO WRITER AGENT ---')[1]?.split('--- 🤖 HANDING OFF TO CADENCE AGENT ---')[0] || "";
+                                            const draftBlocks = writerPart.split(/## 📍 r\//g).slice(1);
+                                            return draftBlocks.map((block, bIdx) => {
+                                                const sub = block.split('\n')[0].trim();
+                                                const titleMatch = block.match(/\*\*Title:\*\* (.*)/);
+                                                const bodyMatch = block.match(/\*\*Body:\*\* ([\s\S]*?)(?=\n\n##|$)/);
+                                                return (
+                                                    <DraftCard
+                                                        key={bIdx}
+                                                        subreddit={sub}
+                                                        title={titleMatch ? titleMatch[1] : "Draft Title"}
+                                                        content={bodyMatch ? bodyMatch[1].trim() : "Draft Body"}
+                                                    />
+                                                );
+                                            });
+                                        })()}
+
+                                        <FormattedOutput text={aiOutput.split('--- 🤖 HANDING OFF TO CADENCE AGENT ---')[1] || ""} title="Phase 3: Scheduling Agent" />
+
+                                        <View style={styles.endOfRoad}>
+                                            <View style={styles.endOfRoadLine} />
+                                            <Text style={styles.endOfRoadText}>End of the road</Text>
+                                            <View style={styles.endOfRoadLine} />
+                                        </View>
+
+                                        <TouchableOpacity
+                                            style={styles.confirmButton}
+                                            onPress={reset}
+                                        >
+                                            <Text style={styles.confirmButtonText}>Create Another</Text>
+                                        </TouchableOpacity>
+                                    </View>
                                 </ScrollView>
                             </View>
                         )}
                     </View>
                 )}
             </ScrollView>
+
         </SafeAreaView>
     );
 }
@@ -1055,5 +1135,31 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#475569',
         fontFamily: 'Geist',
+    },
+    stickyHeaderWrapper: {
+        backgroundColor: '#F8FAFC',
+        paddingHorizontal: 20,
+        paddingTop: 8,
+        paddingBottom: 4,
+    },
+    endOfRoad: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+        marginTop: 40,
+        marginBottom: 20,
+    },
+    endOfRoadLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: '#E2E8F0',
+        maxWidth: 60,
+    },
+    endOfRoadText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#94A3B8',
+        fontFamily: 'Geist-Medium',
     },
 });

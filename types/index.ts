@@ -15,6 +15,7 @@ export interface Campaign {
   commentsPerDay: { min: number; max: number };
   createdAt: string;
   status: 'active' | 'draft' | 'paused';
+  aiOutput?: string;
 }
 
 export interface Action {

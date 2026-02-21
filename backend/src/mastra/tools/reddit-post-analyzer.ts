@@ -48,7 +48,15 @@ export const redditPostAnalyzer = createTool({
             const posts = json.data.children;
 
             if (!posts || posts.length === 0) {
-                throw new Error("No posts found for analysis");
+                // Return a fallback/default instead of throwing
+                return {
+                    subreddit,
+                    analysisPeriod: "Past 30 Days",
+                    peakHour: 14, // Default general high-engagement hour (2 PM UTC)
+                    peakDay: "Tuesday", // Default general high-engagement day
+                    bestWindows: [{ day: "Tuesday", hourUTC: 14, frequency: 0 }],
+                    engagementVelocity: "Low/No Recent Data (Using general peak heuristics)",
+                };
             }
 
             // Matrix for Day/Hour tracking
@@ -104,7 +112,15 @@ export const redditPostAnalyzer = createTool({
             };
 
         } catch (error: any) {
-            throw new Error(`Failed to analyze subreddit: ${error.message}`);
+            // Return fallback even on fetch errors to keep the pipeline alive
+            return {
+                subreddit,
+                analysisPeriod: "Past 30 Days",
+                peakHour: 14,
+                peakDay: "Tuesday",
+                bestWindows: [],
+                engagementVelocity: "Error retrieving data (Using general peak heuristics)",
+            };
         }
     },
 });

@@ -14,7 +14,8 @@ export const cadenceAgent = new Agent({
   CORE RESPONSIBILITIES:
   1. DATA-DRIVEN TIMING: For each target subreddit provided by Agent A, you MUST use the 'reddit-post-analyzer' tool. 
      - This tool looks at the top 100 successful posts of the last month in that specific sub.
-     - Use the 'peakHour' and 'peakDay' from the tool's actual findings, not generic internet advice.
+     - Use the 'peakHour' and 'peakDay' from the tool's actual findings.
+     - RESILIENCE: If the tool returns a fallback (e.g., "Low/No Recent Data"), proceed using the provided peakHour/peakDay without stalling. Generic peak windows are better than no windows.
   
   2. CAMPAIGN SPACING: Create a schedule that staggers posts.
      - Never post to closely related subreddits within the same 6-hour window.

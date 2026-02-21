@@ -32,7 +32,6 @@ app.post('/api/generate-campaign', async (req, res) => {
         const writer = mastra.getAgent('writer');
         const cadence = mastra.getAgent('cadenceAgent');
 
-        // Set headers for SSE (Server-Sent Events) or raw streaming
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Transfer-Encoding', 'chunked');
 
@@ -41,89 +40,85 @@ Product Name: ${productName}
 Description: ${productDescription}
 Goal: ${userGoal}
 
-Identify 3-5 subreddits, verify their rules, and define a native framing strategy.`;
+Identify 5 potential subreddits and verify their rules.`;
 
         console.log(`🔍 [Campaign] Starting generation for: ${productName}`);
 
-        // STEP 1: Scouting
+        // STEP 1 & 2: Scouting & Research
         res.write('[STEP:1]\n');
         console.log('Step 1: Scouting...');
 
         let strategyText = '';
+        let sentStep2 = false;
         const strategistStream = await strategist.stream(strategistPrompt);
 
         for await (const chunk of (strategistStream as any).textStream) {
             res.write(chunk);
             strategyText += chunk;
-
-            // Heuristic for Step 2: Once we have some text, we're likely analyzing it
-            if (strategyText.length > 500 && !strategyText.includes('[STEP:2]')) {
-                // res.write('\n[STEP:2]\n'); // We'll let the agent output trigger it if possible, or just send it here
+            if (strategyText.length > 500 && !sentStep2) {
+                res.write('\n[STEP:2]\n');
+                sentStep2 = true;
             }
         }
 
-        // STEP 3: Verifying rules + STEP 4: Drafting
-        res.write('\n\n[STEP:3]\n\n');
-        res.write('--- 🤖 HANDING OFF TO WRITER AGENT ---\n\n');
-        console.log('Step 3/4: Writing...');
+        // STEP 5: Timing Analysis (Internal, but moves progress)
+        res.write('\n\n--- 🤖 HANDING OFF TO CADENCE AGENT ---\n\n');
+        res.write('\n[STEP:5]\n');
+        console.log('Step 5: Scheduling Analysis...');
 
-        const writerPrompt = `
-        Here is the strategy research provided by Agent A. 
-        Please generate high-quality Reddit post drafts based on this data.
+        const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+        const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+        const cadencePrompt = `
+        For each subreddit identified by the Strategist, find the absolute best peak day and hour to post.
         
-        STRATEGY DATA:
+        CONTEXT:
+        Current Time: ${currentTime} UTC (${currentDay})
+        
+        SUBREDDITS FOUND:
         ${strategyText}
         
-        INSTRUCTIONS:
-        - Generate a specific post for EACH subreddit recommended above.
-        - STRICTLY follow the "Rules Constraints" and "Safety Rating" provided for each.
-        - Use the specific "Framing Strategy" suggested.
-        - Start by saying you are performing a safety check.
+        Provide the Optimal Overall peak window (Day and Time) for each.
         `;
 
+        let cadenceText = '';
+        const cadenceStream = await cadence.stream(cadencePrompt);
+
+        for await (const chunk of (cadenceStream as any).textStream) {
+            // We stream it so frontend can see it if it wants, but it will be filtered from main view
+            res.write(chunk);
+            cadenceText += chunk;
+        }
+
+        // STEP 3 & 4: Safety & Drafting (Final Step)
+        res.write('\n\n[STEP:3]\n\n');
+        res.write('--- 🤖 HANDING OFF TO WRITER AGENT ---\n\n');
+        console.log('Step 3/4: Writing Drafts...');
+
+        const writerPrompt = `
+        Generate high-quality Reddit post drafts based on the research and timing provided below.
+        
+        RESEARCH:
+        ${strategyText}
+        
+        TIMING ANALYSIS:
+        ${cadenceText}
+        
+        INSTRUCTIONS:
+        - For EACH recommendation, start with a header exactly like this: "## r/[SubredditName]"
+        - Follow with "**Title:**" and "**Body:**" sections.
+        - Follow with a "**Scheduled For:** [Day] at [Time]" section using the peak window research.
+        - MATCH THE USER VOICE: Direct, casual, no corporate fluff (no "hey folks", no "I got curious").
+        - Keep the posts very authentic and human-like.
+        `;
+
+        res.write('\n[STEP:4]\n');
         let writerText = '';
         const writerStream = await writer.stream(writerPrompt);
 
         for await (const chunk of (writerStream as any).textStream) {
             res.write(chunk);
             writerText += chunk;
-
-            if (writerText.includes('**Title:**') && !writerText.includes('[STEP:4]')) {
-                res.write('\n[STEP:4]\n');
-            }
-        }
-
-        // STEP 5: Finalizing Cadence
-        res.write('\n\n[STEP:5]\n\n');
-        res.write('--- 🤖 HANDING OFF TO CADENCE AGENT ---\n\n');
-        console.log('Step 5: Scheduling...');
-
-        const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-        const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-
-        const cadencePrompt = `
-        We have the strategy and the drafts. Now we need the TIMING.
-        
-        CONTEXT:
-        Current Day: ${currentDay}
-        Current Time: ${currentTime} UTC
-        
-        STRATEGY DATA:
-        ${strategyText}
-        
-        DRAFT CONTENT:
-        ${writerText}
-        
-        INSTRUCTIONS:
-        - Analyze the "Optimal Overall" posting times for EACH subreddit mentioned.
-        - cross-reference with "Self-promo" days if found in the rules.
-        - Provide the final scheduling block for the user.
-        `;
-
-        const cadenceResult = await cadence.stream(cadencePrompt);
-
-        for await (const chunk of (cadenceResult as any).textStream) {
-            res.write(chunk);
         }
 
         res.end();
