@@ -196,7 +196,7 @@ const MODELS = {
   // Agent B: The Voice Specialist (Premium brain for human-like writing)
   WRITER: openai("gpt-4o"),
   // Orchestrator: The Project Manager (Ultra-fast routing and planning)
-  ORCHESTRATOR: groq("llama-3.3-70b-versatile"),
+  ORCHESTRATOR: openai("gpt-4o"),
   // Agent A: The Deep Researcher (Reasoning-focused for subreddit scouting)
   STRATEGIST: groq("llama-3.3-70b-versatile"),
   // Agent C: The Data Analyst (Logic-focused for engagement peak analysis)
@@ -315,6 +315,7 @@ const writer = new Agent({
   - End with statements, not asks: "Building the android version rn." NOT "Would love your thoughts!"
   - No hedging: "I'm building" not "I've been working on" or "I got curious about"
   - Real-time feel: Updates, current tense, like you're documenting as you go
+  - No FREAKING em dashes
 
   ABSOLUTELY FORBIDDEN (Auto-flag these as AI tells):
   - "folks like us" / "folks" in general
@@ -525,25 +526,22 @@ const campaignGenerator = new Agent({
   YOUR MISSION:
   When a user describes their product or service, you coordinate with three specialized agents to create a full campaign:
   CORE RESPONSIBILITIES:
-  1. DATA-DRIVEN TIMING: For each target subreddit provided by Agent A, you MUST use the 'reddit-post-analyzer' tool. 
-     - This tool looks at the top 100 successful posts of the last month in that specific sub.
-     - Use the 'peakHour' and 'peakDay' from the tool's actual findings.
-     - IMPORTANT: All times MUST be normalized and presented in **GMT 0 (Accra/Dublin time)**. The user is in this timezone.
+  1. DATA-DRIVEN TIMING: Delegate this to the 'cadenceAgent' (Agent C). It will use the data analyzer to find peak hours.
   
-  2. CAMPAIGN SPACING: Create a schedule that staggers posts.
+  2. CAMPAIGN SPACING: Ensure the final schedule in your response staggers posts.
      - Never post to closely related subreddits within the same 6-hour window.
      - Maximum 2-3 posts per day across the entire account to avoid being flagged as a spam bot.
   
   HOW TO INTERACT:
-  - You MUST be wordy and communicative. Do not stay silent while waiting for sub-agents.
-  - Before calling a sub-agent, output a header to tell the user what you are doing (e.g., "### \u{1F50D} SCOUTING SUBREDDITS...").
-  - This ensures the user sees progress in the stream immediately.
+  - Before delegating to a sub-agent, you MUST output a clear status header (e.g., "### \u{1F50D} SCOUTING SUBREDDITS...") so the user sees progress in the stream.
+  - Wait for the sub-agent to finish before summarizing or moving to the next step.
+  - Do not attempt to summarize research until Agent A has fully responded.
   
   WORKFLOW:
   1. START: Output "### \u{1F3AF} ANALYZING PRODUCT & GOALS..."
-  2. CALL THE STRATEGIST: Get the target subreddits. Once done, output "### \u{1F4CD} TARGETS IDENTIFIED: [Subreddit Names]"
-  3. CALL THE WRITER: For each recommended subreddit, get a draft. Output "### \u{1F4DD} DRAFTING POSTS..."
-  4. CALL THE CADENCE AGENT: Output "### \u{1F4C5} CALCULATING PEAK TIMING..."
+  2. CALL THE STRATEGIST: Use the 'strategist' agent to get target subreddits.
+  3. CALL THE CADENCE AGENT: Use the 'cadenceAgent' to get peak timing.
+  4. CALL THE WRITER: Use the 'writer' agent to get drafts.
   5. FINALIZE: Compile everything using the exact format below.
   
   FORMATTING THE OUTPUT:
@@ -589,7 +587,8 @@ const campaignGenerator = new Agent({
   - Ensure the output flows logically from "Where to post" to "What to post" to "When to post".
   `,
   model: MODELS.ORCHESTRATOR,
-  agents: { strategist, writer, cadenceAgent }
+  agents: { strategist, writer, cadenceAgent },
+  tools: { searchTool, redditPostAnalyzer }
 });
 
 "use strict";

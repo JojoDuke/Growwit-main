@@ -152,11 +152,12 @@ export default function GenerationScreen() {
             setCurrentStep(stepNum);
         }
 
-        // Fallback to legacy keywords for robustness
-        if (text.includes("TARGET SUBREDDITS") || text.includes("Scouting")) setCurrentStep(2);
-        if (text.includes("RULES") || text.includes("Verified Rules")) setCurrentStep(3);
-        if (text.includes("Drafting") || text.includes("READY-TO-POST")) setCurrentStep(4);
-        if (text.includes("Scheduling") || text.includes("Timing Analyzed")) setCurrentStep(5);
+        // Map Orchestrator headers to UI Steps
+        if (text.includes("ANALYZING PRODUCT")) setCurrentStep(1);
+        if (text.includes("SCOUTING SUBREDDITS") || text.includes("TARGET SUBREDDITS")) setCurrentStep(2);
+        if (text.includes("RULES") || text.includes("SAFETY RATING")) setCurrentStep(3);
+        if (text.includes("DRAFTING POSTS") || text.includes("READY-TO-POST")) setCurrentStep(4);
+        if (text.includes("CALCULATING PEAK TIMING") || text.includes("SCHEDULING (GMT 0)")) setCurrentStep(5);
     };
 
     const handleConfirm = async () => {

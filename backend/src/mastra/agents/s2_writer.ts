@@ -42,6 +42,7 @@ export const writer = new Agent({
   - End with statements, not asks: "Building the android version rn." NOT "Would love your thoughts!"
   - No hedging: "I'm building" not "I've been working on" or "I got curious about"
   - Real-time feel: Updates, current tense, like you're documenting as you go
+  - No FREAKING em dashes
 
   ABSOLUTELY FORBIDDEN (Auto-flag these as AI tells):
   - "folks like us" / "folks" in general

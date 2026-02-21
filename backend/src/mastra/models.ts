@@ -9,7 +9,7 @@ export const MODELS = {
     WRITER: openai('gpt-4o'),
 
     // Orchestrator: The Project Manager (Ultra-fast routing and planning)
-    ORCHESTRATOR: groq('llama-3.3-70b-versatile'),
+    ORCHESTRATOR: openai('gpt-4o'),
 
     // Agent A: The Deep Researcher (Reasoning-focused for subreddit scouting)
     STRATEGIST: groq('llama-3.3-70b-versatile'),
