@@ -26,7 +26,7 @@ export default function CampaignCreateScreen() {
   const [goal, setGoal] = useState("discussion");
   const [accountAge, setAccountAge] = useState("30");
   const [accountKarma, setAccountKarma] = useState("500");
-  const [postsPerMonth, setPostsPerMonth] = useState("30");
+  const [postsPerMonth, setPostsPerMonth] = useState("20");
   const [accountName, setAccountName] = useState("");
   const [accounts, setAccounts] = useState<string[]>([]);
 
@@ -47,7 +47,7 @@ export default function CampaignCreateScreen() {
     setGoal("discussion");
     setAccountAge("90");
     setAccountKarma("1500");
-    setPostsPerMonth("45");
+    setPostsPerMonth("20");
     setAccounts(["u/dev_helper", "u/logic_flow"]);
   };
 
@@ -156,14 +156,14 @@ export default function CampaignCreateScreen() {
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Monthly Post Goal (Max 100)</Text>
+            <Text style={styles.label}>Monthly Post Goal (Max 20)</Text>
             <TextInput
               style={styles.input}
               value={postsPerMonth}
               onChangeText={(val) => {
                 const num = parseInt(val) || 0;
-                if (num <= 100) setPostsPerMonth(val);
-                else setPostsPerMonth("100");
+                if (num <= 20) setPostsPerMonth(val);
+                else setPostsPerMonth("20");
               }}
               keyboardType="number-pad"
             />

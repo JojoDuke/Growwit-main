@@ -59,8 +59,12 @@ export default function ReviewScreen() {
     const [generatedPosts, setGeneratedPosts] = useState<any[]>([]);
     const [postCounts, setPostCounts] = useState<Record<string, number>>({});
 
-    const year = 2026;
-    const today = new Date(); // Dynamic current date
+    const year = new Date().getFullYear();
+    const today = useMemo(() => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }, []);
 
     useEffect(() => {
         startCrafting();
@@ -110,23 +114,14 @@ export default function ReviewScreen() {
                             const bodyMatch = content.match(/\*\*Body:\*\*\s*([\s\S]*?)(?=\n\n|\n\*\*Suggested|$)/i);
 
                             if (titleMatch || bodyMatch) {
-                                // Logic: Spread with at least 2-3 day gaps for safety
+                                // Logic: Spread across 30 days starting from tomorrow
                                 const totalExpected = parseInt(params.postsPerMonth as string) || 20;
-                                let dayOffset = 0;
-                                let hourTag = "10:00 AM";
-
-                                if (totalExpected <= 30) {
-                                    // Space out 2-3 days apart as requested
-                                    const gap = totalExpected <= 15 ? 4 : 2;
-                                    dayOffset = (postIndex + 1) * gap;
-                                } else {
-                                    // High volume: multiple per day allowed
-                                    dayOffset = Math.floor(postIndex / 2) + 1;
-                                    hourTag = (postIndex % 2 === 0) ? "9:00 AM" : "4:00 PM";
-                                }
+                                // Calculate gap: if 20 posts, gap is 1.5. Math.round(i * 1.5) gives 0, 2, 3, 5... which is better than 0, 1, 2, 3...
+                                const gap = Math.max(1.5, 30 / Math.max(totalExpected, 1));
+                                const dayOffset = Math.round(postIndex * gap);
 
                                 const scheduledDate = new Date(today);
-                                scheduledDate.setDate(today.getDate() + dayOffset);
+                                scheduledDate.setDate(today.getDate() + 1 + dayOffset);
 
                                 const dateKey = `${scheduledDate.getFullYear()}-${String(scheduledDate.getMonth() + 1).padStart(2, '0')}-${String(scheduledDate.getDate()).padStart(2, '0')}`;
 
@@ -137,7 +132,7 @@ export default function ReviewScreen() {
                                     subreddit: sub,
                                     dateKey: dateKey,
                                     displayDate: `${MONTHS[scheduledDate.getMonth()]} ${scheduledDate.getDate()}`,
-                                    displayTime: hourTag,
+                                    displayTime: `${Math.floor(Math.random() * 12) + 1}:${Math.random() > 0.5 ? '30' : '00'} ${Math.random() > 0.5 ? 'AM' : 'PM'}`,
                                 };
 
                                 setGeneratedPosts(prev => [...prev, newPost]);
