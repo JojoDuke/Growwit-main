@@ -102,7 +102,7 @@ export default function GenerationScreen() {
 
     const startGeneration = async () => {
         try {
-            const response = await fetch('http://192.168.0.91:3001/api/generate-campaign', {
+            const response = await fetch('http://192.168.1.204:3001/api/generate-campaign', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -134,10 +134,17 @@ export default function GenerationScreen() {
             setIsGenerating(false);
             setIsFinished(true);
             setCurrentStep(5);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Generation error:", error);
-            Alert.alert("Error", "Failed to connect to AI engine. Please ensure backend is running.");
             setIsGenerating(false);
+            Alert.alert(
+                "Connection Failed",
+                `Could not reach the campaign engine at 192.168.1.204:3001.\n\nDetails: ${error.message}`,
+                [
+                    { text: "Retry", onPress: () => startGeneration() },
+                    { text: "OK", style: "cancel" }
+                ]
+            );
         }
     };
 
@@ -160,30 +167,14 @@ export default function GenerationScreen() {
         if (text.includes("CALCULATING PEAK TIMING") || text.includes("SCHEDULING (GMT 0)")) setCurrentStep(5);
     };
 
-    const handleConfirm = async () => {
-        const finalAccounts = JSON.parse(params.accounts as string || "[]");
-        const campaignId = `campaign-${Date.now()}`;
-        const newCampaign = {
-            id: campaignId,
-            name: params.name as string,
-            product: params.product as string,
-            goal: params.goal as any,
-            accounts: finalAccounts.map((acc: string, idx: number) => ({
-                id: `account-${idx}`,
-                name: acc,
-                karma: parseInt(params.accountKarma as string) || 0,
-                accountAge: parseInt(params.accountAge as string) || 0,
-            })),
-            postsPerMonth: parseInt(params.postsPerMonth as string) || 50,
-            commentsPerDay: { min: 3, max: 7 },
-            createdAt: new Date().toISOString(),
-            status: "active" as const,
-            aiOutput: aiOutput,
-        };
-
-        const initialActions = parseCampaignOutput(aiOutput, campaignId, `account-0`);
-        await addCampaign(newCampaign, initialActions);
-        router.replace(`/(tabs)`);
+    const handleConfirm = () => {
+        router.push({
+            pathname: "/campaign/review",
+            params: {
+                ...params,
+                aiOutput: aiOutput
+            }
+        });
     };
 
     const parseCampaignOutput = (text: string, campaignId: string, accountId: string): any[] => {
@@ -278,7 +269,7 @@ export default function GenerationScreen() {
             {isFinished && (
                 <View style={styles.footer}>
                     <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
-                        <Text style={styles.confirmButtonText}>Confirm & Launch Campaign</Text>
+                        <Text style={styles.confirmButtonText}>Craft {params.postsPerMonth || "0"} Posts</Text>
                     </TouchableOpacity>
                 </View>
             )}

@@ -29,7 +29,7 @@ export const strategist = new Agent({
        - Link restrictions
        - Required tags or flair
        - Posting windows (e.g., "Self-promo Saturday only")
-    4. STRATEGIZE: For the top 3 subreddits found, define a "Native Framing":
+    4. STRATEGIZE: For at least 10 subreddits found, define a "Native Framing":
        - BAD: "Try my new app [Link]"
        - GOOD (Native): "I've been struggling with [Problem], so I built a small tool to help. Would love feedback from fellow [Niche members]."
     5. AUDIT: Tag each recommendation with a Safety Rating (Green/Yellow/Red) based on the ACTUAL subreddit rules you fetched.
@@ -47,7 +47,7 @@ export const strategist = new Agent({
   - Native Framing Strategy
   - Safety Rating & Detailed Reason
 
-  Then, AT THE END, always include a "COPY-PASTE FOR AGENT B" section for EACH subreddit recommendation like this:
+  Then, AT THE END, always include a "COPY-PASTE FOR AGENT B" section for EACH subreddit recommendation (Minimum 10 recommendations) like this:
 
   ---
   📋 COPY-PASTE FOR AGENT B (Subreddit 1):
@@ -59,14 +59,7 @@ export const strategist = new Agent({
   Safety Rating: [Green/Yellow/Red]
 
   ---
-  📋 COPY-PASTE FOR AGENT B (Subreddit 2):
-  
-  [Same format for second recommendation]
-
-  ---
-  📋 COPY-PASTE FOR AGENT B (Subreddit 3):
-  
-  [Same format for third recommendation]
+  [Repeat for subreddits 2 through 10+]
 
   This makes it easy for the user to copy each block directly into the Writing & Safety Agent without reformatting.
   `,

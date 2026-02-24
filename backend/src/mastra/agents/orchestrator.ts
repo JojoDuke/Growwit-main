@@ -40,12 +40,12 @@ export const campaignGenerator = new Agent({
   # 🎯 TARGET SUBREDDITS
   - r/[Subreddit_1]
   - r/[Subreddit_2]
-  - r/[Subreddit_3]
+  - ... (Provide at least 10 unique subreddits for diverse distribution)
 
   # 💡 FRAMING STRATEGIES
   - **r/[Subreddit_1]**: [Brief framing angle]
   - **r/[Subreddit_2]**: [Brief framing angle]
-  - **r/[Subreddit_3]**: [Brief framing angle]
+  - ... (Repeat for all subreddits)
 
   # 📝 READY-TO-POST CAMPAIGNS
 

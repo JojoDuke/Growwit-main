@@ -78,144 +78,93 @@ export const DraftCard = ({ title, content, subreddit, scheduledFor }: { title: 
     );
 };
 
-export const FormattedOutput = ({
-    text,
-    title = "Phase 1: Strategist Agent",
-    skipInitialThought = false,
-    isInsideCollapse = false,
-}: {
-    text: string;
-    title?: string;
-    skipInitialThought?: boolean;
-    isInsideCollapse?: boolean;
-}) => {
-    const parts = text.split(/(--- 🤖 HANDING OFF TO .*? ---)/g);
+export const FormattedOutput = ({ text }: { text: string }) => {
+    // 1. Pre-process text to remove common AI "tells" and cleanup
+    const cleanText = text
+        .replace(/--- 🤖 HANDING OFF TO .*? ---/g, "")
+        .replace(/\[STEP:\d+\]/g, "")
+        .replace(/---/g, "")
+        .trim();
 
-    const renderBlock = (content: string, index: number) => {
-        const normalized = content
-            .replace(/\r/g, "")
-            .replace(/([^\n])\n([^\n])/g, "$1 $2")
-            .replace(/([^\n])\n([^\n])/g, "$1 $2")
-            .replace(/\s+\n/g, "\n")
-            .replace(/\n\s+/g, "\n")
-            .trim();
-
-        const blocks = normalized.split(/\n\n+/);
-
-        return (
-            <View key={index} style={agentStyles.contentBlock}>
-                {blocks.map((block, bIdx) => {
-                    const trimmed = block.trim();
-                    if (!trimmed) return null;
-
-                    if (/\[STEP:\d+\]/.test(trimmed)) return null;
-
-                    if (trimmed.startsWith("# ") || trimmed.startsWith("## ") || trimmed.startsWith("### ")) {
-                        const hText = trimmed
-                            .replace(/^#+\s*/, "")
-                            .replace(/\*/g, "")
-                            .trim();
-
-                        return (
-                            <Text key={`h-${bIdx}`} style={trimmed.startsWith("# ") ? agentStyles.h1 : trimmed.startsWith("## ") ? agentStyles.h2 : agentStyles.h3}>
-                                {hText}
-                            </Text>
-                        );
-                    }
-
-                    const labelPattern = /^\**([a-zA-Z\s]{2,20}):\**\s*(.*)/is;
-                    const match = trimmed.match(labelPattern);
-
-                    if (match) {
-                        const label = match[1].trim();
-
-                        const value = match[2]
-                            .trim()
-                            .replace(/\*\*/g, "")
-                            .replace(/\n+/g, " ");
-
-                        return (
-                            <View key={`l-${bIdx}`} style={agentStyles.labelItem}>
-                                <Text style={agentStyles.boldLabel}>{label}:</Text>
-                                {value ? <Text style={agentStyles.labelText}>{value}</Text> : null}
-                            </View>
-                        );
-                    }
-
-                    if (trimmed.startsWith("- ") || trimmed.startsWith("• ") || trimmed.startsWith("* ")) {
-                        const bText = trimmed
-                            .replace(/^[-•*]\s*/, "")
-                            .replace(/\n+/g, " ")
-                            .trim();
-                        return (
-                            <View key={`b-${bIdx}`} style={agentStyles.bulletRow}>
-                                <Text style={agentStyles.bullet}>•</Text>
-                                <Text style={agentStyles.bulletText}>{bText}</Text>
-                            </View>
-                        );
-                    }
-
-                    const cleanedBlock = trimmed.replace(/\n+/g, " ");
-                    return (
-                        <Text key={`p-${bIdx}`} style={isInsideCollapse ? agentStyles.thoughtText : agentStyles.paragraphLine}>
-                            {cleanedBlock}
-                        </Text>
-                    );
-                })}
-            </View>
-        );
+    // 2. Extract sections based on the Headers
+    const sections = {
+        targeting: cleanText.match(/# 🎯 TARGET SUBREDDITS([\s\S]*?)(?=#|$)/i)?.[1].trim() || "",
+        framing: cleanText.match(/# 💡 FRAMING STRATEGIES([\s\S]*?)(?=#|$)/i)?.[1].trim() || "",
+        timing: cleanText.match(/📅 SCHEDULING (GMT 0):([\s\S]*?)(?=#|$|##)/i)?.[1].trim() || "",
+        engagement: cleanText.match(/⚡ ENGAGEMENT STRATEGY:([\s\S]*?)(?=#|$|##)/i)?.[1].trim() || "",
     };
 
-    if (isInsideCollapse) {
-        return <View>{renderBlock(text, 0)}</View>;
-    }
+    const renderList = (content: string) => {
+        const items = content.split(/\n+/).filter(line => line.trim().startsWith("-") || line.trim().startsWith("*"));
+        if (items.length === 0) return <Text style={agentStyles.paragraphLine}>{content}</Text>;
+
+        return items.map((item, idx) => (
+            <View key={idx} style={agentStyles.bulletRow}>
+                <View style={agentStyles.dot} />
+                <Text style={agentStyles.bulletText}>{item.replace(/^[-*]\s*/, "").trim()}</Text>
+            </View>
+        ));
+    };
+
+    const renderKeyVal = (content: string) => {
+        const lines = content.split("\n").filter(l => l.includes(":"));
+        return lines.map((line, idx) => {
+            const [label, ...val] = line.split(":");
+            return (
+                <View key={idx} style={agentStyles.labelItem}>
+                    <Text style={agentStyles.boldLabel}>{label.replace(/\*/g, "").trim()}:</Text>
+                    <Text style={agentStyles.labelText}>{val.join(":").trim().replace(/\*/g, "")}</Text>
+                </View>
+            );
+        });
+    };
 
     return (
         <View style={agentStyles.formattedContainer}>
-            {parts.map((part, index) => {
-                const trimmedPart = part.trim();
-                if (!trimmedPart) return null;
-
-                const isHandoff = trimmedPart.includes("--- 🤖 HANDING OFF TO");
-                if (isHandoff) return null;
-
-                // Split by draft markers but keep everything
-                const segments = trimmedPart.split(/(?=(?:## |### |📍 )r\/)/g);
-
-                return (
-                    <View key={index}>
-                        {segments.map((segment, sIdx) => {
-                            const trimmedSegment = segment.trim();
-                            if (!trimmedSegment) return null;
-
-                            const isDraft = /^(?:## |### |📍 )r\//i.test(trimmedSegment);
-
-                            if (isDraft) {
-                                const subMatch = trimmedSegment.match(/^(?:## |### |📍 )\s*r\/([^\s\n:*]+)/i);
-                                const sub = subMatch ? subMatch[1] : "community";
-
-                                const titleMatch = trimmedSegment.match(/\*\*Title:\*\* (.*)/i);
-                                const bodyMatch = trimmedSegment.match(/\*\*Body:\*\* ([\s\S]*?)(?=\n\n|\n\*\*|\n---|$)/i);
-                                const scheduleMatch = trimmedSegment.match(/(?:Scheduled For|Time|📅 SCHEDULING).*?:\*\*? (.*)/is);
-
-                                if (bodyMatch || titleMatch) {
-                                    return (
-                                        <DraftCard
-                                            key={sIdx}
-                                            subreddit={sub}
-                                            title={titleMatch ? titleMatch[1].trim() : "Draft Title"}
-                                            content={bodyMatch ? bodyMatch[1].trim() : "Draft Body"}
-                                            scheduledFor={scheduleMatch ? scheduleMatch[1].trim() : undefined}
-                                        />
-                                    );
-                                }
-                            }
-
-                            return renderBlock(trimmedSegment, sIdx);
-                        })}
+            {/* Category: Communities */}
+            {sections.targeting ? (
+                <View style={agentStyles.strategyBlock}>
+                    <View style={agentStyles.sectionHeaderRow}>
+                        <Text style={agentStyles.categoryEmoji}>🎯</Text>
+                        <Text style={agentStyles.sectionHeaderText}>TARGET COMMUNITIES</Text>
                     </View>
-                );
-            })}
+                    <View style={agentStyles.strategyContent}>
+                        {renderList(sections.targeting)}
+                    </View>
+                </View>
+            ) : null}
+
+            {/* Category: Strategy */}
+            {sections.framing ? (
+                <View style={agentStyles.strategyBlock}>
+                    <View style={agentStyles.sectionHeaderRow}>
+                        <Text style={agentStyles.categoryEmoji}>💡</Text>
+                        <Text style={agentStyles.sectionHeaderText}>FRAMING STRATEGIES</Text>
+                    </View>
+                    <View style={agentStyles.strategyContent}>
+                        {renderKeyVal(sections.framing)}
+                    </View>
+                </View>
+            ) : null}
+
+            {/* Category: Intelligence */}
+            {sections.timing || sections.engagement ? (
+                <View style={agentStyles.strategyBlock}>
+                    <View style={agentStyles.sectionHeaderRow}>
+                        <Text style={agentStyles.categoryEmoji}>📅</Text>
+                        <Text style={agentStyles.sectionHeaderText}>CAMPAIGN INTELLIGENCE</Text>
+                    </View>
+                    <View style={agentStyles.strategyContent}>
+                        {sections.timing ? renderKeyVal(sections.timing) : null}
+                        {sections.engagement ? (
+                            <View style={{ marginTop: 12 }}>
+                                <Text style={agentStyles.boldLabel}>Engagement Policy:</Text>
+                                <Text style={agentStyles.paragraphLine}>{sections.engagement}</Text>
+                            </View>
+                        ) : null}
+                    </View>
+                </View>
+            ) : null}
         </View>
     );
 };
@@ -223,6 +172,41 @@ export const FormattedOutput = ({
 export const agentStyles = StyleSheet.create({
     formattedContainer: {
         paddingVertical: 10,
+    },
+    strategyBlock: {
+        backgroundColor: "#FFFFFF",
+        borderRadius: 20,
+        padding: 20,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+        elevation: 2,
+    },
+    strategyContent: {
+        marginTop: 16,
+    },
+    categoryEmoji: {
+        fontSize: 20,
+        marginRight: 4,
+    },
+    sectionHeaderRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: "#F1F5F9",
+        paddingBottom: 12,
+    },
+    sectionHeaderText: {
+        fontSize: 12,
+        fontWeight: "900",
+        color: "#64748B",
+        letterSpacing: 1.5,
+        fontFamily: "Geist-Bold",
     },
     contentBlock: {
         marginBottom: 20,
@@ -262,24 +246,32 @@ export const agentStyles = StyleSheet.create({
     labelItem: {
         flexDirection: "row",
         flexWrap: "wrap",
-        marginBottom: 8,
+        marginBottom: 10,
+        backgroundColor: "#F8FAFC",
+        padding: 10,
+        borderRadius: 8,
         gap: 4,
     },
     boldLabel: {
-        fontSize: 14,
-        fontWeight: "700",
+        fontSize: 13,
+        fontWeight: "800",
         color: "#1E293B",
         fontFamily: "Geist-Bold",
+        textTransform: "uppercase",
+        opacity: 0.7,
     },
     labelText: {
         fontSize: 14,
-        color: "#475569",
+        color: "#334155",
         fontFamily: "Geist",
+        lineHeight: 20,
+        flex: 1,
     },
     bulletRow: {
         flexDirection: "row",
-        gap: 8,
-        marginBottom: 6,
+        alignItems: "center",
+        gap: 12,
+        marginBottom: 10,
         paddingLeft: 4,
     },
     bullet: {
@@ -288,9 +280,8 @@ export const agentStyles = StyleSheet.create({
     },
     bulletText: {
         flex: 1,
-        fontSize: 14,
-        color: "#475569",
-        lineHeight: 20,
+        fontSize: 15,
+        color: "#334155",
         fontFamily: "Geist",
     },
     thoughtContainer: {
@@ -416,20 +407,6 @@ export const agentStyles = StyleSheet.create({
         fontSize: 12,
         color: "#475569",
         fontFamily: "Geist",
-    },
-    sectionHeaderRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-        marginBottom: 12,
-        paddingBottom: 4,
-    },
-    sectionHeaderText: {
-        fontSize: 10,
-        fontWeight: "800",
-        color: "#64748B",
-        letterSpacing: 2,
-        textTransform: "uppercase",
     },
     dot: {
         width: 6,
