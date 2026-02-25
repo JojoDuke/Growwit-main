@@ -14,6 +14,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ChevronLeft, ChevronRight, Share2, MoreHorizontal } from "lucide-react-native";
 import { DraftCard } from "@/components/AgentUI";
+import { useCampaigns } from "@/contexts/CampaignContext";
+import { Campaign, Action, Account } from "@/types";
 
 const { width } = Dimensions.get("window");
 
@@ -24,27 +26,31 @@ const MONTHS = [
 
 const DAYS_OF_WEEK = ["S", "M", "T", "W", "T", "F", "S"];
 
-const CalendarDay = ({ date, month, year, postCounts, isCurrentMonth }: {
+const CalendarDay = ({ date, month, year, postCounts, isCurrentMonth, todayKey }: {
     date: number;
     month: number;
     year: number;
     postCounts: Record<string, number>;
     isCurrentMonth: boolean;
+    todayKey: string;
 }) => {
     if (!isCurrentMonth) return <View style={styles.daySquareEmpty} />;
 
     const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`;
     const count = postCounts[dateKey] || 0;
+    const isToday = todayKey === dateKey;
 
     return (
         <View style={[
             styles.daySquare,
             count === 1 && styles.daySquarePost,
             count > 1 && styles.daySquareMultiple,
+            isToday && styles.dayToday,
         ]}>
             <Text style={[
                 styles.dayText,
-                count > 0 && styles.dayTextPost,
+                count > 0 && styles.dayTextWhite,
+                isToday && count === 0 && styles.dayTextToday,
             ]}>{date}</Text>
             {count > 1 && <View style={styles.multiIndicator} />}
         </View>
@@ -54,6 +60,7 @@ const CalendarDay = ({ date, month, year, postCounts, isCurrentMonth }: {
 export default function ReviewScreen() {
     const params = useLocalSearchParams();
     const router = useRouter();
+    const { addCampaign } = useCampaigns();
     const [currentMonthIndex, setCurrentMonthIndex] = useState(new Date().getMonth());
     const [isCrafting, setIsCrafting] = useState(true);
     const [generatedPosts, setGeneratedPosts] = useState<any[]>([]);
@@ -80,8 +87,8 @@ export default function ReviewScreen() {
                 body: JSON.stringify({
                     aiOutput: params.aiOutput,
                     postsPerMonth: params.postsPerMonth,
-                    productName: params.product as string,
-                    productDescription: params.description as string,
+                    productName: params.name as string,
+                    productDescription: params.product as string,
                 }),
             });
 
@@ -131,6 +138,7 @@ export default function ReviewScreen() {
                                     body: bodyMatch ? bodyMatch[1].trim() : content,
                                     subreddit: sub,
                                     dateKey: dateKey,
+                                    scheduledFor: scheduledDate.toISOString(),
                                     displayDate: `${MONTHS[scheduledDate.getMonth()]} ${scheduledDate.getDate()}`,
                                     displayTime: `${Math.floor(Math.random() * 12) + 1}:${Math.random() > 0.5 ? '30' : '00'} ${Math.random() > 0.5 ? 'AM' : 'PM'}`,
                                 };
@@ -217,9 +225,20 @@ export default function ReviewScreen() {
                     </View>
 
                     <View style={styles.daysHeader}>
-                        {DAYS_OF_WEEK.map((day, i) => (
-                            <Text key={i} style={[styles.dayHeaderCell, i === 0 && { color: "#FF4D00" }]}>{day}</Text>
-                        ))}
+                        {DAYS_OF_WEEK.map((day, i) => {
+                            const isTodayWeekday = new Date().getMonth() === currentMonthIndex && new Date().getDay() === i;
+                            return (
+                                <Text
+                                    key={i}
+                                    style={[
+                                        styles.dayHeaderCell,
+                                        isTodayWeekday && { color: "#FF4D00", fontWeight: "800" }
+                                    ]}
+                                >
+                                    {day}
+                                </Text>
+                            );
+                        })}
                     </View>
 
                     <View style={styles.daysGrid}>
@@ -231,6 +250,7 @@ export default function ReviewScreen() {
                                 year={year}
                                 isCurrentMonth={cell.isCurrentMonth}
                                 postCounts={postCounts}
+                                todayKey={today.toISOString().split('T')[0]}
                             />
                         ))}
                     </View>
@@ -261,8 +281,19 @@ export default function ReviewScreen() {
                                 key={post.id}
                                 subreddit={post.subreddit}
                                 title={post.title}
-                                content={post.body}
-                                scheduledFor={`${post.displayDate} at ${post.displayTime}`}
+                                scheduledFor={`${post.displayDate} · ${post.displayTime}`}
+                                onPress={() => router.push({
+                                    pathname: "/campaign/draft/[id]",
+                                    params: {
+                                        id: post.id,
+                                        title: post.title,
+                                        body: post.body,
+                                        subreddit: post.subreddit,
+                                        displayDate: post.displayDate,
+                                        displayTime: post.displayTime,
+                                        dateKey: post.dateKey,
+                                    },
+                                })}
                             />
                         ))
                     ) : (
@@ -275,9 +306,57 @@ export default function ReviewScreen() {
 
             <View style={styles.footer}>
                 <TouchableOpacity
-                    style={[styles.publishButton, isCrafting && { opacity: 0.5 }]}
-                    disabled={isCrafting}
-                    onPress={() => router.replace("/(tabs)")}
+                    style={[styles.publishButton, (isCrafting || generatedPosts.length === 0) && { opacity: 0.5 }]}
+                    disabled={isCrafting || generatedPosts.length === 0}
+                    onPress={async () => {
+                        try {
+                            const accounts: string[] = JSON.parse(params.accounts as string || "[]");
+                            const mappedAccounts: Account[] = accounts.map(name => ({
+                                id: `acc-${Math.random().toString(36).substr(2, 9)}`,
+                                name,
+                                karma: parseInt(params.accountKarma as string) || 0,
+                                accountAge: parseInt(params.accountAge as string) || 0,
+                            }));
+
+                            const campaignId = `camp-${Date.now()}`;
+
+                            const newCampaign: Campaign = {
+                                id: campaignId,
+                                name: params.name as string || "New Campaign",
+                                product: params.product as string || "",
+                                goal: (params.goal as any) || "discussion",
+                                accounts: mappedAccounts,
+                                postsPerMonth: parseInt(params.postsPerMonth as string) || 20,
+                                commentsPerDay: { min: 2, max: 5 },
+                                createdAt: new Date().toISOString(),
+                                status: "active",
+                                aiOutput: params.aiOutput as string,
+                            };
+
+                            const newActions: Action[] = generatedPosts.map((post, idx) => ({
+                                id: post.id,
+                                campaignId: campaignId,
+                                accountId: mappedAccounts[idx % mappedAccounts.length].id,
+                                type: "post",
+                                status: "pending",
+                                subreddit: post.subreddit,
+                                title: post.title,
+                                content: post.body,
+                                scheduledFor: post.scheduledFor,
+                            }));
+
+                            await addCampaign(newCampaign, newActions);
+
+                            Alert.alert(
+                                "Success!",
+                                `Your campaign "${newCampaign.name}" with ${newActions.length} posts has been launched.`,
+                                [{ text: "Awesome", onPress: () => router.replace("/(tabs)/campaigns") }]
+                            );
+                        } catch (err) {
+                            console.error("Failed to launch campaign:", err);
+                            Alert.alert("Launch Failed", "There was an error saving your campaign. Please try again.");
+                        }
+                    }}
                 >
                     <Text style={styles.publishButtonText}>
                         {isCrafting ? "Generating Contents..." : `Launch ${generatedPosts.length} Posts`}
@@ -411,6 +490,19 @@ const styles = StyleSheet.create({
     },
     dayTextPost: {
         color: "#FF4D00",
+    },
+    dayTextWhite: {
+        color: "#FFFFFF",
+        fontWeight: "600",
+    },
+    dayTextToday: {
+        color: "#FF4D00",
+        fontWeight: "900",
+    },
+    dayToday: {
+        borderColor: "#FF4D00",
+        borderWidth: 2,
+        backgroundColor: "#FFFFFF",
     },
     dayTextSelected: {
         color: "#FF4D00",

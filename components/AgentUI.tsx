@@ -9,8 +9,10 @@ import {
 } from "react-native";
 import {
     ChevronDown,
+    ChevronRight,
     Copy,
     Clock,
+    Hash,
 } from "lucide-react-native";
 
 export const CollapsibleThought = ({ title, content }: { title: string; content: string }) => {
@@ -34,7 +36,7 @@ export const CollapsibleThought = ({ title, content }: { title: string; content:
             {isOpen && (
                 <View style={agentStyles.thoughtBody}>
                     <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={true} style={{ maxHeight: 350 }}>
-                        <FormattedOutput text={content} isInsideCollapse />
+                        <FormattedOutput text={content} />
                     </ScrollView>
                 </View>
             )}
@@ -42,39 +44,46 @@ export const CollapsibleThought = ({ title, content }: { title: string; content:
     );
 };
 
-export const DraftCard = ({ title, content, subreddit, scheduledFor }: { title: string; content: string; subreddit?: string; scheduledFor?: string }) => {
+export const DraftCard = ({
+    title,
+    subreddit,
+    scheduledFor,
+    onPress,
+}: {
+    title: string;
+    content?: string;
+    subreddit?: string;
+    scheduledFor?: string;
+    onPress?: () => void;
+}) => {
     return (
-        <View style={agentStyles.draftCard}>
-            <View style={agentStyles.draftCardSubredditRow}>
+        <TouchableOpacity
+            style={agentStyles.draftCard}
+            onPress={onPress}
+            activeOpacity={0.75}
+        >
+            {/* Top: Subreddit */}
+            <View style={agentStyles.draftCardTop}>
                 <View style={agentStyles.subredditBadge}>
+                    <Hash size={11} color="#FF6B35" />
                     <Text style={agentStyles.subredditBadgeText}>r/{subreddit || "community"}</Text>
                 </View>
-                <View style={agentStyles.draftCardActions}>
-                    <TouchableOpacity style={agentStyles.draftActionButton}>
-                        <Copy size={14} color="#64748B" />
-                    </TouchableOpacity>
-                </View>
+                <ChevronRight size={16} color="#CBD5E1" />
             </View>
 
-            <View style={agentStyles.draftScheduleInfo}>
-                <Text style={agentStyles.draftScheduleLabel}>Scheduled For:</Text>
-                <Text style={agentStyles.draftScheduleValue}>{scheduledFor || "Analyzing peak window..."}</Text>
-            </View>
+            {/* Middle: Title (hero) */}
+            <Text style={agentStyles.draftCardTitle} numberOfLines={3}>
+                {title}
+            </Text>
 
-            <View style={agentStyles.draftDivider} />
-
-            <View style={agentStyles.draftField}>
-                <Text style={agentStyles.draftLabel}>TITLE</Text>
-                <Text style={agentStyles.draftValue}>{title}</Text>
-            </View>
-
-            <View style={agentStyles.draftField}>
-                <Text style={agentStyles.draftLabel}>BODY</Text>
-                <Text style={agentStyles.draftValue} numberOfLines={5}>
-                    {content}
+            {/* Bottom: Scheduled time */}
+            <View style={agentStyles.draftCardBottom}>
+                <Clock size={12} color="#94A3B8" />
+                <Text style={agentStyles.draftCardSchedule}>
+                    {scheduledFor || "Scheduling..."}
                 </Text>
             </View>
-        </View>
+        </TouchableOpacity>
     );
 };
 
@@ -324,28 +333,49 @@ export const agentStyles = StyleSheet.create({
     },
     draftCard: {
         backgroundColor: "#FFFFFF",
-        borderRadius: 14,
-        padding: 16,
+        borderRadius: 18,
+        padding: 18,
         borderWidth: 1,
-        borderColor: "#F1F5F9",
-        marginBottom: 12,
+        borderColor: "#E2E8F0",
+        marginBottom: 10,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.03,
-        shadowRadius: 4,
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
         elevation: 1,
+        gap: 10,
     },
-    draftCardSubredditRow: {
+    draftCardTop: {
         flexDirection: "row",
-        justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: 16,
+        justifyContent: "space-between",
+    },
+    draftCardTitle: {
+        fontSize: 16,
+        fontWeight: "700",
+        color: "#0F172A",
+        lineHeight: 22,
+        fontFamily: "Geist-Bold",
+    },
+    draftCardBottom: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+    },
+    draftCardSchedule: {
+        fontSize: 12,
+        color: "#94A3B8",
+        fontFamily: "Geist",
+        fontWeight: "500",
     },
     subredditBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
         backgroundColor: "#FFF1ED",
-        paddingHorizontal: 10,
+        paddingHorizontal: 9,
         paddingVertical: 4,
-        borderRadius: 6,
+        borderRadius: 20,
         borderWidth: 1,
         borderColor: "#FF6B3520",
     },
