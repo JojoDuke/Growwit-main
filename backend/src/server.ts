@@ -146,7 +146,7 @@ app.get('/api/ping', (req, res) => {
 app.listen(port, '0.0.0.0', () => {
     console.log(`
   🚀 Growwit Backend Bridge is live!
-  📡 Listening on: http://0.0.0.0:${port} (LAN: http://192.168.1.204:${port})
+  📡 Listening on: http://0.0.0.0:${port} (LAN: http://192.168.68.109:${port})
   🔗 Core Endpoint: /api/generate-campaign
   🛠️ Craft Endpoint: /api/craft-real-posts
   `);

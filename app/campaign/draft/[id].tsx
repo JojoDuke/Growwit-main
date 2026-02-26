@@ -66,7 +66,7 @@ export default function DraftDetailScreen() {
         <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
+                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)")} style={styles.iconButton}>
                     <ChevronLeft size={24} color="#1E293B" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Draft</Text>

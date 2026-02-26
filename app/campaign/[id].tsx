@@ -43,7 +43,7 @@ export default function CampaignDetailScreen() {
         return (
             <View style={styles.errorContainer}>
                 <Text>Campaign not found</Text>
-                <TouchableOpacity onPress={() => router.back()}>
+                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)/campaigns")}>
                     <Text style={styles.backLink}>Go Back</Text>
                 </TouchableOpacity>
             </View>
@@ -61,7 +61,7 @@ export default function CampaignDetailScreen() {
                     style: "destructive",
                     onPress: async () => {
                         await deleteCampaign(campaign.id);
-                        router.back();
+                        router.canGoBack() ? router.back() : router.replace("/(tabs)/campaigns");
                     }
                 }
             ]
@@ -77,7 +77,7 @@ export default function CampaignDetailScreen() {
                 <TouchableOpacity
                     onPress={() => {
                         if (router.canGoBack()) {
-                            router.back();
+                            router.canGoBack() ? router.back() : router.replace("/(tabs)/campaigns");
                         } else {
                             router.replace("/");
                         }
@@ -87,7 +87,11 @@ export default function CampaignDetailScreen() {
                     <ChevronLeft size={24} color="#1E293B" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle} numberOfLines={1}>{campaign.name}</Text>
-                <TouchableOpacity onPress={handleDelete} style={styles.headerButton}>
+                <TouchableOpacity
+                    onPress={handleDelete}
+                    style={styles.headerButton}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
                     <Trash2 size={20} color="#EF4444" />
                 </TouchableOpacity>
             </View>
@@ -175,11 +179,11 @@ const styles = StyleSheet.create({
     },
     headerTitle: {
         flex: 1,
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: "700",
         color: "#1E293B",
         textAlign: "center",
-        marginHorizontal: 8,
+        marginHorizontal: 4,
         fontFamily: "Geist-Bold",
     },
     content: {

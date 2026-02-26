@@ -9,6 +9,7 @@ import {
     Platform,
     FlatList,
     Alert,
+    ActivityIndicator,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,6 +17,7 @@ import { ChevronLeft, ChevronRight, Share2, MoreHorizontal } from "lucide-react-
 import { DraftCard } from "@/components/AgentUI";
 import { useCampaigns } from "@/contexts/CampaignContext";
 import { Campaign, Action, Account } from "@/types";
+import { BACKEND_URL } from "@/utils/config";
 
 const { width } = Dimensions.get("window");
 
@@ -63,6 +65,7 @@ export default function ReviewScreen() {
     const { addCampaign } = useCampaigns();
     const [currentMonthIndex, setCurrentMonthIndex] = useState(new Date().getMonth());
     const [isCrafting, setIsCrafting] = useState(true);
+    const [isLaunching, setIsLaunching] = useState(false);
     const [generatedPosts, setGeneratedPosts] = useState<any[]>([]);
     const [postCounts, setPostCounts] = useState<Record<string, number>>({});
 
@@ -80,8 +83,11 @@ export default function ReviewScreen() {
     const startCrafting = async () => {
         try {
             setIsCrafting(true);
+            // Reset state on each crafting run (handles retries cleanly)
+            setGeneratedPosts([]);
+            setPostCounts({});
 
-            const response = await fetch('http://192.168.1.204:3001/api/craft-real-posts', {
+            const response = await fetch(`${BACKEND_URL}/api/craft-real-posts`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -133,7 +139,7 @@ export default function ReviewScreen() {
                                 const dateKey = `${scheduledDate.getFullYear()}-${String(scheduledDate.getMonth() + 1).padStart(2, '0')}-${String(scheduledDate.getDate()).padStart(2, '0')}`;
 
                                 const newPost = {
-                                    id: `post-${postIndex}-${Date.now()}`,
+                                    id: `post-${postIndex}-${Math.random().toString(36).substr(2, 9)}`,
                                     title: titleMatch ? titleMatch[1].trim() : "Campaign Post",
                                     body: bodyMatch ? bodyMatch[1].trim() : content,
                                     subreddit: sub,
@@ -159,7 +165,7 @@ export default function ReviewScreen() {
             console.error("💥 Crafting Error:", err);
             Alert.alert(
                 "Phase 2 Failed",
-                `Could not reach the crafting engine at 192.168.1.204:3001.`,
+                `Could not reach the crafting engine.`,
                 [
                     { text: "Retry", onPress: () => startCrafting() },
                     { text: "Back", onPress: () => router.back(), style: "cancel" }
@@ -194,7 +200,7 @@ export default function ReviewScreen() {
     return (
         <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
+                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)")} style={styles.iconButton}>
                     <ChevronLeft size={24} color="#1E293B" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Review Schedule</Text>
@@ -306,12 +312,31 @@ export default function ReviewScreen() {
 
             <View style={styles.footer}>
                 <TouchableOpacity
-                    style={[styles.publishButton, (isCrafting || generatedPosts.length === 0) && { opacity: 0.5 }]}
-                    disabled={isCrafting || generatedPosts.length === 0}
+                    style={[styles.publishButton, (isCrafting || isLaunching || generatedPosts.length === 0) && { opacity: 0.5 }]}
+                    disabled={isCrafting || isLaunching || generatedPosts.length === 0}
                     onPress={async () => {
                         try {
-                            const accounts: string[] = JSON.parse(params.accounts as string || "[]");
-                            const mappedAccounts: Account[] = accounts.map(name => ({
+                            setIsLaunching(true);
+                            console.log("🔘 Launch process started...");
+
+                            // Yield thread to allow re-render and spinner to show
+                            await new Promise(resolve => setTimeout(resolve, 150));
+
+                            // Safely parse accounts — URL params can mangle JSON across multiple screens
+                            let parsedAccounts: string[] = [];
+                            try {
+                                const raw = params.accounts as string;
+                                parsedAccounts = raw ? JSON.parse(raw) : [];
+                            } catch (parseErr) {
+                                console.warn("Could not parse accounts param:", parseErr);
+                            }
+
+                            // Fallback so launch never silently fails due to empty accounts
+                            if (parsedAccounts.length === 0) {
+                                parsedAccounts = ["u/default"];
+                            }
+
+                            const mappedAccounts: Account[] = parsedAccounts.map(name => ({
                                 id: `acc-${Math.random().toString(36).substr(2, 9)}`,
                                 name,
                                 karma: parseInt(params.accountKarma as string) || 0,
@@ -345,22 +370,32 @@ export default function ReviewScreen() {
                                 scheduledFor: post.scheduledFor,
                             }));
 
+                            console.log(`🚀 Final check: Launching "${newCampaign.name}" with ${newActions.length} actions`);
+
                             await addCampaign(newCampaign, newActions);
 
+                            console.log("✅ Launch successful, navigating home...");
+                            setIsLaunching(false);
+
+                            // Using replace to Home as requested
+                            router.replace("/(tabs)");
+                        } catch (err: any) {
+                            setIsLaunching(false);
+                            console.error("💥 Launch Failed Error:", err);
                             Alert.alert(
-                                "Success!",
-                                `Your campaign "${newCampaign.name}" with ${newActions.length} posts has been launched.`,
-                                [{ text: "Awesome", onPress: () => router.replace("/(tabs)/campaigns") }]
+                                "Launch Failed",
+                                `Error: ${err?.message || "Unknown error"}. Check console for details.`
                             );
-                        } catch (err) {
-                            console.error("Failed to launch campaign:", err);
-                            Alert.alert("Launch Failed", "There was an error saving your campaign. Please try again.");
                         }
                     }}
                 >
-                    <Text style={styles.publishButtonText}>
-                        {isCrafting ? "Generating Contents..." : `Launch ${generatedPosts.length} Posts`}
-                    </Text>
+                    {isLaunching ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                        <Text style={styles.publishButtonText}>
+                            {isCrafting ? "Generating Contents..." : `Launch ${generatedPosts.length} Posts`}
+                        </Text>
+                    )}
                 </TouchableOpacity>
             </View>
         </SafeAreaView>

@@ -19,6 +19,7 @@ import {
 } from "lucide-react-native";
 import { useCampaigns } from "@/contexts/CampaignContext";
 import { FormattedOutput } from "@/components/AgentUI";
+import { BACKEND_URL } from "@/utils/config";
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -102,7 +103,7 @@ export default function GenerationScreen() {
 
     const startGeneration = async () => {
         try {
-            const response = await fetch('http://192.168.1.204:3001/api/generate-campaign', {
+            const response = await fetch(`${BACKEND_URL}/api/generate-campaign`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -139,7 +140,7 @@ export default function GenerationScreen() {
             setIsGenerating(false);
             Alert.alert(
                 "Connection Failed",
-                `Could not reach the campaign engine at 192.168.1.204:3001.\n\nDetails: ${error.message}`,
+                `Could not reach the campaign engine.\n\nDetails: ${error.message}`,
                 [
                     { text: "Retry", onPress: () => startGeneration() },
                     { text: "OK", style: "cancel" }

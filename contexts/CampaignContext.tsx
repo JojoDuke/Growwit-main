@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode, useState } from 'react';
+import React, { createContext, useContext, ReactNode, useState, useCallback, useMemo } from 'react';
 import { Campaign, Action } from '@/types';
 
 interface SafetyRules {
@@ -91,6 +91,10 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
   };
 
   const generateInitialActions = (campaign: Campaign): Action[] => {
+    if (!campaign.accounts || campaign.accounts.length === 0) {
+      console.warn('[Context] No accounts provided for campaign, returning empty initial actions');
+      return [];
+    }
     const subreddits = ["startups", "indiehackers", "saas", "entrepreneur", "SideProject", "selfhosted"];
     const now = new Date();
     const subreddit = subreddits[Math.floor(Math.random() * subreddits.length)];
@@ -145,8 +149,12 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
     setActions(prev => [...prev, nextAction]);
   };
 
-  const addCampaign = async (campaign: Campaign, initialActions?: Action[]) => {
+  const addCampaign = useCallback(async (campaign: Campaign, initialActions?: Action[]) => {
     setIsLoading(true);
+    console.log('[Context] addCampaign started:', campaign.name);
+
+    // Tiny delay to allow calling component to show its loading spinner
+    await new Promise(resolve => setTimeout(resolve, 0));
 
     try {
       const actionsToSet = initialActions && initialActions.length > 0
@@ -155,12 +163,13 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
 
       setCampaigns(prev => [...prev, { ...campaign, status: "active" }]);
       setActions(prev => [...prev, ...actionsToSet]);
+      console.log('[Context] Campaign and actions added successfully');
     } catch (error) {
-      console.error('Error adding campaign:', error);
+      console.error('[Context] Error adding campaign:', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   const completeAction = async (actionId: string) => {
     const action = actions.find(a => a.id === actionId);
@@ -187,7 +196,7 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
     setActions(prev => prev.filter(a => a.campaignId !== campaignId));
   };
 
-  const value: CampaignContextType = {
+  const value = useMemo(() => ({
     campaigns,
     actions,
     safetyRules: defaultSafetyRules,
@@ -197,7 +206,7 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
     updateCampaign,
     deleteCampaign,
     completeAction,
-  };
+  }), [campaigns, actions, isLoading, addCampaign]);
 
   return (
     <CampaignContext.Provider value={value}>
