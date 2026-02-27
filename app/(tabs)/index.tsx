@@ -23,6 +23,10 @@ import {
   ExternalLink,
   ShieldCheck,
   Bot,
+  Menu,
+  Bell,
+  Search,
+  Users as UsersIcon,
 } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { format, isToday, parseISO } from "date-fns";
@@ -33,6 +37,9 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function HomeScreen() {
   const { campaigns, actions, completeAction } = useCampaigns();
+  const [activeTab, setActiveTab] = useState("All");
+
+  const tabs = ["All", "Upcoming", "Meetings", "Projects"];
 
   const todayActions = useMemo(() => {
     return actions.filter((action) => {
@@ -57,27 +64,62 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={() => router.push('/campaign/create')}
-        activeOpacity={0.7}
-      >
-        <Plus size={24} color="#FFFFFF" />
-      </TouchableOpacity>
+      {/* Top Header Icons */}
+      <View style={styles.topNav}>
+        <TouchableOpacity style={styles.iconCircle}>
+          <Menu size={20} color="#1E293B" />
+        </TouchableOpacity>
+        <View style={styles.rightNav}>
+          <TouchableOpacity style={styles.iconCircle}>
+            <Bell size={20} color="#1E293B" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconCircle}>
+            <Search size={20} color="#1E293B" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={todayActions.length === 0 ? styles.scrollViewContent : undefined}
         showsVerticalScrollIndicator={false}
       >
+        {/* Main Headline */}
+        <View style={styles.headerSection}>
+          <Text style={styles.mainHeadline}>
+            Jumpstart your morning &{"\n"}make it productive!
+          </Text>
+        </View>
+
+        {/* Filter Tabs */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabScroll}
+          contentContainerStyle={styles.tabContainer}
+        >
+          {tabs.map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              style={[
+                styles.tabPill,
+                activeTab === tab && styles.activeTabPill
+              ]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === tab && styles.activeTabText
+                ]}
+              >
+                {tab}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
         {todayActions.length > 0 ? (
-          <View style={styles.section}>
-            <View style={[styles.sectionHeader, styles.topSectionHeader]}>
-              <Text style={styles.sectionTitle}>Ready to Post</Text>
-              <View style={{ flex: 1 }} />
-              <Text style={styles.actionCount}>{todayActions.length}</Text>
-              <View style={{ width: 64 }} />
-            </View>
+          <View style={styles.listSection}>
             {todayActions.map((action) => {
               const campaign = campaigns.find((c) => c.id === action.campaignId);
               return (
@@ -194,87 +236,67 @@ function ActionCard({
     onComplete(action.id);
   };
 
+  // Progress logic
+  const isPost = action.type === "post";
+  const priorityColor = isPost ? "#EF4444" : "#F59E0B";
+  const priorityLabel = isPost ? "Urgent" : "Medium";
+  const deadlineDate = action.scheduledFor
+    ? format(parseISO(action.scheduledFor), "MMMM d, yyyy")
+    : "Flexible";
+
   return (
-    <View style={styles.actionCard}>
-      <View style={styles.actionHeader}>
-        <View style={styles.actionIconContainer}>
-          {action.type === "post" ? (
-            <AlertCircle size={20} color="#FF6B35" />
-          ) : (
-            <Clock size={20} color="#10B981" />
-          )}
-        </View>
-        <View style={styles.actionInfo}>
-          <Text style={styles.actionType}>
-            {action.type === "post" ? "Post" : "Comment"} in r/{action.subreddit}
-          </Text>
-          <View style={styles.statusRow}>
-            <Text style={styles.actionCampaign}>{campaign?.name || "Unknown Campaign"}</Text>
-            <View style={styles.safetyBadge}>
-              <ShieldCheck size={12} color="#10B981" />
-              <Text style={styles.safetyText}>Safe to post</Text>
-            </View>
+    <View style={styles.newActionCard}>
+      <TouchableOpacity
+        style={styles.cardHeader}
+        onPress={() => router.push(`/campaign/${campaign?.id}` as any)}
+      >
+        <Text style={styles.cardTitle}>{action.title || `Action in r/${action.subreddit}`}</Text>
+        <Text style={styles.cardSubtitle} numberOfLines={2}>
+          {action.content || `Post to ${action.subreddit} as part of ${campaign?.name}`}
+        </Text>
+      </TouchableOpacity>
+
+      <View style={styles.metaRow}>
+        <View style={styles.badgeRow}>
+          <View style={styles.priorityBadge}>
+            <View style={[styles.priorityDot, { backgroundColor: priorityColor }]} />
+            <Text style={styles.priorityText}>{priorityLabel}</Text>
+          </View>
+          <View style={styles.deadlineBadge}>
+            <Text style={styles.deadlineText}>Deadline : {deadlineDate}</Text>
           </View>
         </View>
-        {action.scheduledFor && (
-          <Text style={styles.actionTime}>
-            {format(parseISO(action.scheduledFor), "h:mm a")}
+
+        {/* Dummy Avatar Group */}
+        <View style={styles.avatarGroup}>
+          <View style={[styles.avatar, { backgroundColor: '#E2E8F0', zIndex: 3 }]} />
+          <View style={[styles.avatar, { backgroundColor: '#CBD5E1', zIndex: 2, marginLeft: -8 }]} />
+          <View style={[styles.avatar, { backgroundColor: '#94A3B8', zIndex: 1, marginLeft: -8 }]} />
+        </View>
+      </View>
+
+      <View style={styles.progressSection}>
+        <View style={styles.progressLabelRow}>
+          <Text style={styles.progressLabel}>Progress</Text>
+          <Text style={styles.progressPercent}>
+            {isPost ? "60%" : "20%"}
           </Text>
-        )}
+        </View>
+        <View style={styles.progressBarBg}>
+          <View style={[styles.progressBarFill, { width: isPost ? '60%' : '20%' }]} />
+        </View>
       </View>
 
-      <View style={styles.cardDivider} />
-
-      <View style={styles.contentSections}>
-        {action.title && (
-          <View style={styles.contentSection}>
-            <View style={styles.sectionLabelRow}>
-              <Text style={styles.sectionLabel}>REDDIT TITLE</Text>
-              <TouchableOpacity onPress={() => handleCopy(action.title, "Title")}>
-                <Copy size={14} color="#FF6B35" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.snippetContainer}>
-              <Text style={styles.snippetText}>{action.title}</Text>
-            </View>
-          </View>
-        )}
-
-        {action.content && (
-          <View style={styles.contentSection}>
-            <View style={styles.sectionLabelRow}>
-              <Text style={styles.sectionLabel}>POST BODY</Text>
-              <TouchableOpacity onPress={() => handleCopy(action.content, "Body")}>
-                <Copy size={14} color="#FF6B35" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.snippetContainer}>
-              <Text style={styles.snippetText}>{action.content}</Text>
-              {action.cta && (
-                <Text style={styles.ctaText}>{action.cta}</Text>
-              )}
-            </View>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.actionButtons}>
-        <TouchableOpacity
-          style={styles.openRedditButton}
-          onPress={handleOpenReddit}
-          activeOpacity={0.7}
-        >
-          <ExternalLink size={16} color="#FF6B35" />
-          <Text style={styles.openRedditText}>Open r/{action.subreddit}</Text>
+      <View style={styles.actionRow}>
+        <TouchableOpacity style={styles.iconButton} onPress={handleOpenReddit}>
+          <ExternalLink size={18} color="#64748B" />
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.completeButton}
-          onPress={handleComplete}
-          activeOpacity={0.7}
-        >
-          <CheckCircle2 size={16} color="#FFFFFF" />
-          <Text style={styles.completeButtonText}>I Posted</Text>
+        <TouchableOpacity style={styles.iconButton} onPress={() => handleCopy(action.content || "", "Content")}>
+          <Copy size={18} color="#64748B" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.checkButton} onPress={handleComplete}>
+          <CheckCircle2 size={18} color="#FFFFFF" />
+          <Text style={styles.checkButtonText}>Complete</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -284,233 +306,252 @@ function ActionCard({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#F9FAFA", // Light grey from image
   },
-  addButton: {
-    position: "absolute",
-    top: 16,
-    right: 20,
+  topNav: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  rightNav: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  iconCircle: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 10,
-    elevation: 5,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  headerSection: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  mainHeadline: {
+    fontSize: 28,
+    lineHeight: 36,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
+  tabScroll: {
+    marginBottom: 20,
+    maxHeight: 50,
+  },
+  tabContainer: {
+    paddingHorizontal: 20,
+    gap: 8,
+    alignItems: 'center',
+  },
+  tabPill: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: "transparent",
+  },
+  activeTabPill: {
+    backgroundColor: "#FFFFFF",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    elevation: 3,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+  activeTabText: {
+    color: "#1E293B",
   },
   scrollView: {
     flex: 1,
   },
-  scrollViewContent: {
-    flexGrow: 1,
-  },
-  section: {
+  listSection: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingBottom: 100,
   },
-  sectionHeader: {
+  newActionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cardHeader: {
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1E293B",
+    marginBottom: 6,
+  },
+  cardSubtitle: {
+    fontSize: 14,
+    color: "#64748B",
+    lineHeight: 20,
+  },
+  metaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 20,
   },
-  topSectionHeader: {
-    height: 44,
-    marginBottom: 24,
+  badgeRow: {
+    flexDirection: "row",
+    gap: 8,
   },
-  sectionTitle: {
-    fontSize: 14,
+  priorityBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    gap: 6,
+  },
+  priorityDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  priorityText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+  deadlineBadge: {
+    backgroundColor: "#F8FAFC",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  deadlineText: {
+    fontSize: 12,
+    color: "#64748B",
+  },
+  avatarGroup: {
+    flexDirection: "row",
+  },
+  avatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+  progressSection: {
+    backgroundColor: "#F9FAFA",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  progressLabelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  progressLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#94A3B8",
+    textTransform: "uppercase",
+  },
+  progressPercent: {
+    fontSize: 11,
     fontWeight: "700",
     color: "#64748B",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
-  actionCount: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#FF6B35",
+  progressBarBg: {
+    height: 4,
+    backgroundColor: "#E2E8F0",
+    borderRadius: 2,
+    width: "100%",
   },
-  seeAll: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#FF6B35",
+  progressBarFill: {
+    height: 4,
+    backgroundColor: "#22C55E",
+    borderRadius: 2,
   },
-  emptyState: {
-    flex: 1,
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  iconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#F8FAFC",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 40,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  checkButton: {
+    flex: 1,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#10B981",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  checkButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: "center",
   },
   emptyTitle: {
     fontSize: 20,
     fontWeight: "700",
     color: "#1E293B",
     marginTop: 16,
-    marginBottom: 8,
   },
   emptyDescription: {
     fontSize: 14,
     color: "#64748B",
     textAlign: "center",
-    lineHeight: 20,
+    marginTop: 8,
   },
   createButton: {
-    marginTop: 24,
-    paddingVertical: 12,
+    marginTop: 20,
     paddingHorizontal: 24,
-    backgroundColor: "#FF6B35",
+    paddingVertical: 12,
+    backgroundColor: "#1E293B",
     borderRadius: 12,
   },
   createButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
     color: "#FFFFFF",
-  },
-  actionCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  actionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  actionIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#FFF1ED",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  actionInfo: {
-    flex: 1,
-  },
-  actionType: {
-    fontSize: 15,
     fontWeight: "700",
-    color: "#1E293B",
-  },
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 2,
-    gap: 8,
-  },
-  actionCampaign: {
-    fontSize: 13,
-    color: "#64748B",
-  },
-  safetyBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#ECFDF5",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    gap: 4,
-  },
-  safetyText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#10B981",
-    textTransform: "uppercase",
-  },
-  actionTime: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#94A3B8",
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: "#F1F5F9",
-    marginVertical: 12,
-  },
-  contentSections: {
-    gap: 16,
-    marginBottom: 16,
-  },
-  contentSection: {
-    gap: 8,
-  },
-  sectionLabelRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#94A3B8",
-    letterSpacing: 1,
-  },
-  snippetContainer: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#F1F5F9",
-  },
-  snippetText: {
-    fontSize: 14,
-    color: "#334155",
-    lineHeight: 20,
-  },
-  ctaText: {
-    fontSize: 14,
-    color: "#FF6B35",
-    fontWeight: "600",
-    marginTop: 8,
-  },
-  actionButtons: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  openRedditButton: {
-    flex: 1.2,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#FFFFFF",
-    gap: 8,
-  },
-  openRedditText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1E293B",
-  },
-  completeButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: "#10B981",
-    gap: 8,
-  },
-  completeButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#FFFFFF",
   },
   activityCard: {
     flexDirection: "row",
@@ -545,38 +586,6 @@ const styles = StyleSheet.create({
     color: "#64748B",
   },
   activityTime: {
-    fontSize: 12,
-    color: "#64748B",
-  },
-  campaignCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  campaignIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#FFF1ED",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  campaignInfo: {
-    flex: 1,
-  },
-  campaignName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1E293B",
-    marginBottom: 2,
-  },
-  campaignProduct: {
     fontSize: 12,
     color: "#64748B",
   },
